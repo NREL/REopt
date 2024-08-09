@@ -43,19 +43,21 @@ function add_general_storage_dispatch_constraints(m, p, b; _n="")
     #Constraint (4j): Dispatch from storage is no greater than power capacity
 	@constraint(m, [ts in p.time_steps],
         m[Symbol("dvStoragePower"*_n)][b] >= m[Symbol("dvDischargeFromStorage"*_n)][b, ts]
+        + sum(m[Symbol("dvStorageToEV"*_n)][ev, b, ts] for ev in p.s.storage.types.ev)
     )
 
 end
 
 
 function add_elec_storage_dispatch_constraints(m, p, b; _n="")
-				
+
 	# Constraint (4g): state-of-charge for electrical storage - with grid
 	@constraint(m, [ts in p.time_steps_with_grid],
         m[Symbol("dvStoredEnergy"*_n)][b, ts] == m[Symbol("dvStoredEnergy"*_n)][b, ts-1] + p.hours_per_time_step * (  
             sum(p.s.storage.attr[b].charge_efficiency * m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for t in p.techs.elec) 
             + p.s.storage.attr[b].grid_charge_efficiency * m[Symbol("dvGridToStorage"*_n)][b, ts] 
             - m[Symbol("dvDischargeFromStorage"*_n)][b,ts] / p.s.storage.attr[b].discharge_efficiency
+            - sum(m[Symbol("dvStorageToEV"*_n)][ev,b,ts] / p.s.storage.attr[b].discharge_efficiency for ev in p.s.storage.types.ev)
         )
 	)
 
@@ -64,6 +66,7 @@ function add_elec_storage_dispatch_constraints(m, p, b; _n="")
         m[Symbol("dvStoredEnergy"*_n)][b, ts] == m[Symbol("dvStoredEnergy"*_n)][b, ts-1] + p.hours_per_time_step * (  
             sum(p.s.storage.attr[b].charge_efficiency * m[Symbol("dvProductionToStorage"*_n)][b,t,ts] for t in p.techs.elec) 
             - m[Symbol("dvDischargeFromStorage"*_n)][b, ts] / p.s.storage.attr[b].discharge_efficiency
+            - sum(m[Symbol("dvStorageToEV"*_n)][ev,b,ts] / p.s.storage.attr[b].discharge_efficiency for ev in p.s.storage.types.ev)
         )
     )
 

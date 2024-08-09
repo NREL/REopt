@@ -203,7 +203,7 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
         end
 	end
 
-	for b in p.s.storage.types.all
+	for b in setdiff(p.s.storage.types.elec, p.s.storage.types.ev)
 		if p.s.storage.attr[b].max_kw == 0 || p.s.storage.attr[b].max_kwh == 0
 			@constraint(m, [ts in p.time_steps], m[:dvStoredEnergy][b, ts] == 0)
 			@constraint(m, m[:dvStorageEnergy][b] == 0)
@@ -242,9 +242,20 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 				add_cold_thermal_storage_dispatch_constraints(m, p, b)
 			else
 				throw(@error("Invalid storage does not fall in a thermal or electrical set"))
-			end
+			end            
 		end
 	end
+
+	for b in p.s.storage.types.ev
+		add_electric_vehicle_constraints(m, p, b)
+	end
+
+    if !isempty(p.s.storage.types.ev)
+        add_ev_supply_equipment_constraints(m, p)
+    else
+        m[:TotalEVSEInstalledCost] = 0.0
+        m[:EVSESwitchingCost] = 0.0
+    end
 
 	if any(max_kw->max_kw > 0, (p.s.storage.attr[b].max_kw for b in p.s.storage.types.elec))
 		add_storage_sum_constraints(m, p)
@@ -453,7 +464,7 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 	#################################  Objective Function   ########################################
 	@expression(m, Costs,
 		# Capital Costs
-		m[:TotalTechCapCosts] + TotalStorageCapCosts + m[:GHPCapCosts] +
+		m[:TotalTechCapCosts] + TotalStorageCapCosts + m[:GHPCapCosts] + m[:TotalEVSEInstalledCost] + m[:EVSESwitchingCost] +
 
 		# Fixed O&M, tax deductible for owner
 		(TotalPerUnitSizeOMCosts + m[:GHPOMCosts]) * (1 - p.s.financial.owner_tax_rate_fraction) +
@@ -601,6 +612,11 @@ function add_variables!(m::JuMP.AbstractModel, p::REoptInputs)
 		@variables m begin
 			binGenIsOnInTS[p.techs.gen, p.time_steps], Bin  # 1 If technology t is operating in time step h; 0 otherwise
 		end
+	end
+
+	# Serve EV load from storage tech (PV already does it)
+	if !isempty(p.s.storage.types.ev)
+		@variable(m, dvStorageToEV[p.s.storage.types.ev, setdiff(p.s.storage.types.elec,p.s.storage.types.ev), p.time_steps] >= 0)
 	end
 
     if !isempty(p.techs.fuel_burning)

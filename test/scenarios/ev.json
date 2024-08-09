@@ -1,0 +1,41 @@
+{
+    "Site": {
+        "longitude": -118.1164613,
+        "latitude": 34.5794343
+    },
+    "ElectricTariff": {
+        "urdb_label": "62d5b7fc4939f52c862151f9"
+    },    
+    "ElectricLoad": {
+        "doe_reference_name": "Hospital",
+        "annual_kwh": 10000000.0
+    },
+    "ElectricVehicle": [
+        {
+        "energy_capacity_kwh": 150.0,
+        "ev_on_site_start_end": [[6, 18],[6, 18],[6, 18],[6, 18]],
+        "soc_used_off_site": [[0.2,1.0],[0.2,1.0],[0.2,1.0],[0.2,1.0]],
+        "max_c_rate": 2.0
+        },
+        {
+        "energy_capacity_kwh": 150.0,
+        "ev_on_site_start_end": [[6, 18],[6, 18],[6, 18],[6, 18]],
+        "soc_used_off_site": [[0.2,1.0],[0.2,1.0],[0.2,1.0],[0.2,1.0]],
+        "max_c_rate": 2.0
+        }
+    ],
+    "EVSupplyEquipment":{
+        "force_num_to_max": false,
+        "max_num": [2, 1, 1],
+        "power_rating_kw": [50.0, 75.0, 100.0],
+        "installed_cost": [2000.0, 3500.0, 4200.0],
+        "v2g": false
+    },
+    "PV": {
+        "max_kw": 0.0
+    },
+    "ElectricStorage": {
+        "max_kw": 0.0,
+        "max_kwh": 0.0
+    }
+}

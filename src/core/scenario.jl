@@ -24,6 +24,7 @@ struct Scenario <: AbstractScenario
     space_heating_thermal_load_reduction_with_ghp_kw::Union{Vector{Float64}, Nothing}
     cooling_thermal_load_reduction_with_ghp_kw::Union{Vector{Float64}, Nothing}
     steam_turbine::Union{SteamTurbine, Nothing}
+    evse::Union{EVSupplyEquipment, Nothing}
     electric_heater::Union{ElectricHeater, Nothing}
 end
 
@@ -51,9 +52,10 @@ A Scenario struct can contain the following keys:
 - [AbsorptionChiller](@ref) (optional)
 - [GHP](@ref) (optional, can be Array)
 - [SteamTurbine](@ref) (optional)
+- [EVSupplyEquipment](@ref) (optional)
 - [ElectricHeater](@ref) (optional)
 
-All values of `d` are expected to be `Dicts` except for `PV` and `GHP`, which can be either a `Dict` or `Dict[]` (for multiple PV arrays or GHP options).
+All values of `d` are expected to be `Dicts` except for `PV`, `GHP`, and `ElectricVehicle`, which can be either a `Dict` or `Dict[]` (for multiple PV arrays, GHP options, or EVs, respectively).
 
 !!! note 
     Set `flex_hvac_from_json=true` if `FlexibleHVAC` values were loaded in from JSON (necessary to 
@@ -166,6 +168,43 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
         storage_dict = Dict(:max_kw => 0.0) 
     end
     storage_structs["ElectricStorage"] = ElectricStorage(storage_dict, financial)
+    
+    evse = nothing
+    if haskey(d, "ElectricVehicle")
+        if typeof(d["ElectricVehicle"]) <: AbstractDict
+            d["ElectricVehicle"] = [deepcopy(d["ElectricVehicle"])]
+        elseif !(typeof(d["ElectricVehicle"]) <: AbstractArray)
+            throw(@error "EV input must be Dict or Dict[].")
+        end
+        for (i, ev) in enumerate(d["ElectricVehicle"])
+            ev["time_steps_per_hour"] = settings.time_steps_per_hour
+            ev_name_input = get(ev, "name", "")
+            if isempty(ev_name_input)
+                ev["name"] = string("EV", i)
+            elseif !occursin("EV", ev_name_input)
+                ev_name_change = ev_name_input * string("_EV", i)
+                ev["name"] = ev_name_change
+                @warn "Renaming ElectricVehicle name from $ev_name_input to $ev_name_change"
+            end
+            # "Pop" EV-specific inputs and send to a newly created ElectricStorage attribute called "electric_vehicle"
+            storage_dict = dictkeys_tosymbols(ev)
+            electric_vehicle = Dict()
+            for ev_field in fieldnames(ElectricVehicle)
+                if haskey(storage_dict, ev_field)
+                    electric_vehicle[ev_field] = pop!(storage_dict, ev_field)
+                end
+            end
+            storage_dict[:electric_vehicle] = electric_vehicle
+            storage_dict[:off_grid_flag] = settings.off_grid_flag
+            storage_structs[ev["name"]] = ElectricStorage(storage_dict, financial)
+        end
+        if haskey(d, "EVSupplyEquipment")
+            evse = EVSupplyEquipment(dictkeys_tosymbols(d["EVSupplyEquipment"]))
+        else
+            throw(@error "Must provide EVSupplyEquipment input when modeling ElectricVehicle")
+        end
+    end
+    
     # TODO stop building ElectricStorage when it is not modeled by user 
     #       (requires significant changes to constraints, variables)
     if haskey(d, "HotThermalStorage")
@@ -673,6 +712,7 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
         space_heating_thermal_load_reduction_with_ghp_kw,
         cooling_thermal_load_reduction_with_ghp_kw,
         steam_turbine,
+        evse,
         electric_heater
     )
 end

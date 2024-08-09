@@ -227,6 +227,7 @@ Base.@kwdef struct MPCElectricStorage < AbstractElectricStorage
     soc_init_fraction::Float64 = 0.5
     can_grid_charge::Bool = true
     grid_charge_efficiency::Float64 = 0.96 * 0.975^2
+    electric_vehicle::Union{ElectricVehicle, Nothing} = nothing
 end
 ```
 """
@@ -242,6 +243,7 @@ Base.@kwdef struct MPCElectricStorage <: AbstractElectricStorage
     max_kw::Float64 = size_kw
     max_kwh::Float64 = size_kwh
     minimum_avg_soc_fraction::Float64 = 0.0
+    electric_vehicle::Union{ElectricVehicle, Nothing} = nothing
 end
 
 

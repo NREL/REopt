@@ -49,16 +49,31 @@ function add_electric_utility_results(m::JuMP.AbstractModel, p::AbstractInputs, 
         GridToLoad = (sum(m[Symbol("dvGridPurchase"*_n)][ts, tier] for tier in 1:p.s.electric_tariff.n_energy_tiers) 
                   - sum(m[Symbol("dvGridToStorage"*_n)][b, ts] for b in p.s.storage.types.elec) 
                   for ts in p.time_steps)
-        GridToBatt = (sum(m[Symbol("dvGridToStorage"*_n)][b, ts] for b in p.s.storage.types.elec) 
-                for ts in p.time_steps)
     else
         GridToLoad = (sum(m[Symbol("dvGridPurchase"*_n)][ts, tier] for tier in 1:p.s.electric_tariff.n_energy_tiers) 
                   for ts in p.time_steps)
+    end
+
+    if !isempty(setdiff(p.s.storage.types.elec, p.s.storage.types.ev))
+        GridToBatt = (sum(m[Symbol("dvGridToStorage"*_n)][b, ts] for b in setdiff(p.s.storage.types.elec, p.s.storage.types.ev)) 
+                for ts in p.time_steps)
+    else
         GridToBatt = zeros(length(p.time_steps))
     end
-    
+
     r["electric_to_load_series_kw"] = round.(value.(GridToLoad), digits=3)
     r["electric_to_storage_series_kw"] = round.(value.(GridToBatt), digits=3)
+
+    if !isempty(p.s.storage.types.ev)
+        GridtoEVs = (
+            sum(
+                m[Symbol("dvGridToStorage"*_n)][b, ts] for b in p.s.storage.types.ev
+            ) for ts in p.time_steps
+        )
+        r["electric_to_electricvehicle_series_kw"] = round.(value.(GridtoEVs), digits=3)
+    else
+        r["electric_to_electricvehicle_series_kw"] = zeros(length(p.time_steps))
+    end
 
     if _n=="" #only output emissions results if not a multinode model
         r["lifecycle_emissions_tonnes_CO2"] = round(value(m[:yr1_emissions_from_elec_grid_net_if_selected_lbs_CO2]*TONNE_PER_LB*p.pwf_grid_emissions["CO2"]), digits=2)

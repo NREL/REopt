@@ -34,12 +34,20 @@ function add_pv_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dict; _n="")
 		r["size_kw"] = round(value(m[Symbol("dvSize"*_n)][t]), digits=4)
 
 		# NOTE: must use anonymous expressions in this loop to overwrite values for cases with multiple PV
-		if !isempty(p.s.storage.types.elec)
-			PVtoBatt = (sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.elec) for ts in p.time_steps)
+		if !isempty(setdiff(p.s.storage.types.elec, p.s.storage.types.ev))
+			PVtoBatt = (sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in setdiff(p.s.storage.types.elec, p.s.storage.types.ev)) for ts in p.time_steps)
 		else
 			PVtoBatt = repeat([0], length(p.time_steps))
 		end
+
+        if !isempty(p.s.storage.types.ev)
+            PVtoEVs = (sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.ev) for ts in p.time_steps)
+		else
+            PVtoEVs = repeat([0], length(p.time_steps))
+		end
+
 		r["electric_to_storage_series_kw"] = round.(value.(PVtoBatt), digits=3)
+        r["electric_to_electricvehicle_series_kw"] = round.(value.(PVtoEVs), digits=3)
 
         r["electric_to_grid_series_kw"] = zeros(size(r["electric_to_storage_series_kw"]))
         r["annual_energy_exported_kwh"] = 0.0
@@ -57,7 +65,8 @@ function add_pv_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dict; _n="")
 		PVtoLoad = (m[Symbol("dvRatedProduction"*_n)][t, ts] * p.production_factor[t, ts] * p.levelization_factor[t]
 					- r["electric_curtailed_series_kw"][ts]
 					- r["electric_to_grid_series_kw"][ts]
-					- r["electric_to_storage_series_kw"][ts] for ts in p.time_steps
+					- r["electric_to_storage_series_kw"][ts]
+                    - r["electric_to_electricvehicle_series_kw"][ts] for ts in p.time_steps
 		)
 		r["electric_to_load_series_kw"] = round.(value.(PVtoLoad), digits=3)
 		Year1PvProd = (sum(m[Symbol("dvRatedProduction"*_n)][t,ts] * p.production_factor[t, ts] for ts in p.time_steps) * p.hours_per_time_step)

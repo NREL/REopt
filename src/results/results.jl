@@ -13,6 +13,9 @@ function reopt_results(m::JuMP.AbstractModel, p::REoptInputs; _n="")
         if p.s.storage.attr[b].max_kwh > 0
             add_electric_storage_results(m, p, d, b; _n)
         end
+        if b in p.s.storage.types.ev
+            add_electric_vehicle_results!(m, p, d, b; _n)
+        end
     end
 
     for b in p.s.storage.types.hot

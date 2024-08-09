@@ -330,6 +330,72 @@ else  # run HiGHS tests
         @test sim_cooling_ton ≈ s.cooling_load.loads_kw_thermal ./ REopt.KWH_THERMAL_PER_TONHOUR atol=0.1   
     end
 
+    @testset "Electric vehicle" begin
+
+        input_data = JSON.parsefile("./scenarios/ev.json")
+
+        s = Scenario(input_data)
+        inputs = REoptInputs(s)
+
+        # HiGHS solver
+        m1 = Model(optimizer_with_attributes(HiGHS.Optimizer, 
+            "output_flag" => false, "mip_rel_gap" => 0.00001, "log_to_console" => false)
+        )
+        m2 = Model(optimizer_with_attributes(HiGHS.Optimizer, 
+            "output_flag" => false, "mip_rel_gap" => 0.00001, "log_to_console" => false)
+        )
+
+        results = run_reopt([m1,m2], inputs)
+
+        charge_efficiency = 0.96 * 0.975^0.5
+        # weekends excluded for now.
+        expected_charge_energy = 260 * ((input_data["ElectricVehicle"][1]["soc_used_off_site"][1][2]-input_data["ElectricVehicle"][1]["soc_used_off_site"][1][1]) * 
+                                        input_data["ElectricVehicle"][1]["energy_capacity_kwh"] + 
+                                        (input_data["ElectricVehicle"][1]["soc_used_off_site"][1][2]-input_data["ElectricVehicle"][1]["soc_used_off_site"][1][1]) * 
+                                        input_data["ElectricVehicle"][2]["energy_capacity_kwh"]) / charge_efficiency
+
+        @test sum(results["ElectricUtility"]["electric_to_electricvehicle_series_kw"]) ≈ expected_charge_energy rtol=0.01
+        # println("NPV = ", results["Financial"]["npv"])
+
+        # Make sure the same EV is not connected to different charger types
+        evs_connected_to_same_charger = false
+        for ts in inputs.time_steps
+            for se in eachindex(s.evse.power_rating_kw)
+                for n in 1:results["EV1"]["number_evse_by_type"][se]
+                    if results["EV1"]["ev_to_evse_series_binary"][se][n][ts] == 1
+                        if results["EV2"]["ev_to_evse_series_binary"][se][n][ts] == 1
+                            evs_connected_to_same_charger = true
+                        end
+                    end
+                end
+            end
+        end
+        @test evs_connected_to_same_charger == false
+
+        # Check the EV switching after implementing a cost for switching more than when the EV arrives or leaves
+        num_evs_by_type = s.evse.max_num
+        num_leave_vs_disconnect = Dict()
+        for ev in ["EV1", "EV2"]
+            num_leave_vs_disconnect[ev] = Dict([("leave", 0), ("disconnect", 0)])
+            for ts in inputs.time_steps[1:end-1]
+                if s.storage.attr[ev].electric_vehicle.ev_on_site_series[ts] -
+                    s.storage.attr[ev].electric_vehicle.ev_on_site_series[ts+1] == 1
+                    num_leave_vs_disconnect[ev]["leave"] += 1
+                end
+                for se in eachindex(s.evse.power_rating_kw)
+                    for n in 1:num_evs_by_type[se]
+                        if results[ev]["ev_to_evse_series_binary"][se][n][ts] -
+                            results[ev]["ev_to_evse_series_binary"][se][n][ts+1] == 1
+                            num_leave_vs_disconnect[ev]["disconnect"] += 1
+                        end
+                    end
+                end        
+            end
+            # Make sure the EV's are not switching more than 10% above what they need to
+            @test num_leave_vs_disconnect[ev]["disconnect"] <= num_leave_vs_disconnect[ev]["leave"] * 1.1
+        end
+    end      
+
     @testset "Backup Generator Reliability" begin
 
         @testset "Compare backup_reliability and simulate_outages" begin

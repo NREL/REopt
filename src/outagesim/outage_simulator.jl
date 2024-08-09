@@ -1,7 +1,8 @@
 # REopt®, Copyright (c) Alliance for Sustainable Energy, LLC. See also https://github.com/NREL/REopt.jl/blob/master/LICENSE.
 
 function simulate_outage(;init_time_step, diesel_kw, fuel_available, b, m, diesel_min_turndown, batt_kwh, batt_kw,
-                    batt_roundtrip_efficiency, n_time_steps, n_steps_per_hour, batt_soc_kwh, crit_load)
+                    batt_roundtrip_efficiency, n_time_steps, n_steps_per_hour, batt_soc_kwh, crit_load, sum_ev_kwh_t0,
+                    sum_ev_total_kwh, sum_ev_kw_t0, tot_ev_rdtrp_eff, incoming_ev_kwh, incoming_max_ev_kwh, incoming_ev_kw)
     """
     Determine how long the critical load can be met with gas generator and energy storage.
     :param init_time_step: Int, initial time step
@@ -19,9 +20,17 @@ function simulate_outage(;init_time_step, diesel_kw, fuel_available, b, m, diese
     :param crit_load: list of float, load after DER (PV, Wind, ...)
     :return: float, number of hours that the critical load can be met using load following
     """
+    
+    batt_soc_kwh += sum_ev_kwh_t0
+    batt_kwh += sum_ev_total_kwh
+    batt_kw += sum_ev_kw_t0
+
     for i in 0:n_time_steps-1
         t = (init_time_step - 1 + i) % n_time_steps + 1  # for wrapping around end of year
         load_kw = crit_load[t]
+
+        batt_soc_kwh += incoming_ev_kwh[i+1]
+        batt_kwh += incoming_max_ev_kwh[i+1]
 
         if load_kw < 0  # load is met
             if batt_soc_kwh < batt_kwh  # charge battery if there's room in the battery
@@ -30,6 +39,15 @@ function simulate_outage(;init_time_step, diesel_kw, fuel_available, b, m, diese
                     batt_kw / n_steps_per_hour * batt_roundtrip_efficiency,  # inverter capacity
                     -load_kw / n_steps_per_hour * batt_roundtrip_efficiency,  # excess energy
                 ])
+            # elseif sum_ev_kwh_t0 < sum_ev_total_kwh
+            #     sum_ev_kwh_t0 += minimum([
+            #         sum_ev_kwh_t0 - sum_ev_total_kwh,     # room available
+            #         sum_ev_kw_t0 / n_steps_per_hour * tot_ev_rdtrp_eff,  # inverter capacity
+            #         -load_kw / n_steps_per_hour * tot_ev_rdtrp_eff,  # excess energy
+            #     ])
+            else
+                # no excess energy in this ts. load is positive and must be met.
+                nothing
             end
 
         else  # check if we can meet load with generator then storage
@@ -44,6 +62,15 @@ function simulate_outage(;init_time_step, diesel_kw, fuel_available, b, m, diese
                             batt_kw / n_steps_per_hour * batt_roundtrip_efficiency,  # inverter capacity
                             (diesel_min_turndown * diesel_kw - load_kw) / n_steps_per_hour * batt_roundtrip_efficiency  # excess energy
                         ])
+                    # elseif sum_ev_kwh_t0 < sum_ev_total_kwh
+                    #     sum_ev_kwh_t0 += minimum([
+                    #         sum_ev_kwh_t0 - sum_ev_total_kwh,     # room available
+                    #         sum_ev_kw_t0[init_time_step+i] / n_steps_per_hour * tot_ev_rdtrp_eff,  # inverter capacity
+                    #         (diesel_min_turndown * diesel_kw - load_kw) / n_steps_per_hour * tot_ev_rdtrp_eff,  # excess energy
+                    #     ])
+                    else
+                        # no excess energy in this ts. load is positive and must be met.
+                        nothing
                     end
                 end
                 load_kw = 0
@@ -69,6 +96,12 @@ function simulate_outage(;init_time_step, diesel_kw, fuel_available, b, m, diese
                     batt_soc_kwh = maximum([0, batt_soc_kwh - load_kw / n_steps_per_hour])
                     load_kw = 0
                 end
+
+                # if minimum([sum_ev_kw_t0, sum_ev_kwh_t0 * n_steps_per_hour]) >= load_kw  # ev can carry balance
+                #     # prevent battery charge from going negative
+                #     sum_ev_kwh_t0 = maximum([0, sum_ev_kwh_t0 - load_kw / n_steps_per_hour])
+                #     load_kw = 0
+                # end
             end
         end
 
