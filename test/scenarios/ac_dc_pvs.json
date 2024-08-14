@@ -1,7 +1,9 @@
 {
     "Site": {
         "latitude": 34.5794343,
-        "longitude": -118.1164613
+        "longitude": -118.1164613,
+        "land_acres": 0.25,
+        "roof_squarefeet": 1000.0
     },
     "Financial": {
       "om_cost_escalation_rate_fraction": 0.025,
@@ -13,9 +15,7 @@
     "ElectricLoad": {
       "doe_reference_name": "RetailStore",
       "annual_kwh": 1000000.0,
-      "year": 2017,
-      "loads_kw_is_net": false,
-      "critical_loads_kw_is_net": false
+      "year": 2017
     },
     "ElectricTariff": {
       "blended_annual_energy_rate": 0.3,
@@ -34,7 +34,7 @@
         {
           "name": "ground",
           "dc_coupled_with_storage": true,
-          "min_kw": 40.0,
+          "existing_kw": 40.0,
           "installed_cost_per_kw": 1600.0,
           "om_cost_per_kw": 16.0,
           "macrs_option_years": 5,
@@ -54,7 +54,7 @@
         },
         {
           "name": "roof_west",
-          "min_kw": 30.0,
+          "existing_kw": 30.0,
           "installed_cost_per_kw": 1600.0,
           "om_cost_per_kw": 16.0,
           "macrs_option_years": 5,
@@ -74,7 +74,7 @@
         },
         {
           "name": "roof_east",
-          "min_kw": 0.0,
+          "existing_kw": 0.0,
           "installed_cost_per_kw": 1600.0,
           "om_cost_per_kw": 16.0,
           "macrs_option_years": 5,

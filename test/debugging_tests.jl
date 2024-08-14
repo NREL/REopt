@@ -11,57 +11,10 @@ using DelimitedFiles
     inputs = JSON.parsefile("./scenarios/ac_dc_pvs.json")
     inputs["ElectricTariff"]["tou_energy_rates_per_kwh"] = repeat(cat(0.2*ones(15), 0.4*ones(5), 0.2*ones(4), dims=1), outer=365)
 
-    # results = run_reopt([m1,m2], inputs)
-    results = run_reopt(m2, inputs)
+    results = run_reopt([m1,m2], inputs)
     open("ac_dc_pvs_results.json","w") do f
         JSON.print(f, results, 4)
     end   
-    # for (key, model) in Dict("OPT" => m2)#"BAU" => m1, 
-    #     println(key)
-    #     # MOI.compute_conflict!(backend(model))
-    #     compute_conflict!(model)
-	# 	# if MOI.get(backend(model), MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-    #     if get_attribute(model, MOI.ConflictStatus()) == MOI.CONFLICT_FOUND
-    #         iis_model, _ = copy_conflict(model)
-    #         print(iis_model)
-    #         # println(keys(model.obj_dict))
-    #         # open("ac_dc_pvs_conflicts.json","w") do f
-    #         #     JSON.print(f, model.obj_dict, 4)
-    #         # end
-	# 		# for (name, obj) in model.obj_dict
-    #         #     # println(typeof(obj))
-	# 		# 	# if typeof(obj) <: ConstraintRef
-    #         #     #     println(MOI.get(model, MOI.ConstraintConflictStatus(), obj))
-	# 		# 	# 	if MOI.get(model, MOI.ConstraintConflictStatus(), obj) == MOI.IN_CONFLICT
-	# 		# 	# 		println(obj)
-	# 		# 	# 	end
-    #         #     println(name)
-	# 		# 	if typeof(obj) <: JuMP.Containers.DenseAxisArray || typeof(obj) <: JuMP.Containers.SparseAxisArray
-	# 		# 		for elem in obj
-	# 		# 			# if typeof(elem) <: ConstraintRef
-    #         #             try
-    #         #                 println(MOI.get(model, MOI.ConstraintConflictStatus(), elem))
-	# 		# 				# if MOI.get(model, MOI.ConstraintConflictStatus(), elem) == MOI.IN_CONFLICT
-	# 		# 				# 	println(elem)
-	# 		# 				# end
-    #         #             catch
-    #         #                 # println(typeof(elem))
-	# 		# 			end
-	# 		# 		end
-    #         #     else
-    #         #         try
-    #         #             # println(typeof(obj))
-    #         #             println(MOI.get(model, MOI.ConstraintConflictStatus(), obj))
-    #         #             # if MOI.get(model, MOI.ConstraintConflictStatus(), obj) == MOI.IN_CONFLICT
-    #         #             #     println(obj)
-    #         #             # end
-    #         #         catch
-    #         #             # println(typeof(obj))
-    #         #         end
-	# 		# 	end
-	# 		# end
-	# 	end
-    # end
 
     @test results["ElectricStorage"]["size_kw"] ≈ 31.88 atol=0.1
     @test results["ElectricStorage"]["size_kwh"] ≈ 210.17 atol=0.1
@@ -81,7 +34,7 @@ using DelimitedFiles
     @test ground_pv["annual_energy_produced_kwh"] ≈ 145904.83 atol=0.1
     @test roof_west["annual_energy_produced_kwh"] ≈ 45938.58 atol=0.1
     @test roof_east["annual_energy_produced_kwh"] ≈ 16714.41 atol=0.1
-    @test sum(ground_pv["electric_to_storage_series_kw"]) ≈ 63124.386 atol=0.1
+    @test sum(ground_pv["electric_to_storage_series_kw"]) ≈ 63160.44 atol=0.1
     @test sum(roof_west["electric_to_storage_series_kw"]) ≈ 0 atol=0.1
     @test sum(roof_east["electric_to_storage_series_kw"]) ≈ 0 atol=0.1
     expected_outage_results = Dict(

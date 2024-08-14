@@ -23,9 +23,9 @@ function add_electric_storage_results(m::JuMP.AbstractModel, p::REoptInputs, d::
     r = Dict{String, Any}()
     r["size_kwh"] = round(value(m[Symbol("dvStorageEnergy"*_n)][b]), digits=2)
     r["size_kw"] = round(value(m[Symbol("dvStoragePower"*_n)][b]), digits=2)
-    # if !isempty(p.techs.dc_couple_with_stor)
-    #     r["dc_couple_inverter_size_kw"] = round(value(m[:dvDCCoupledTechStorageInverterSize][b]), digits=2)
-    # end
+    if !isempty(p.techs.dc_couple_with_stor)
+        r["dc_couple_inverter_size_kw"] = round(value(m[:dvDCCoupledTechStorageInverterSize][b]), digits=2)
+    end
     
     if r["size_kwh"] != 0
     	soc = (m[Symbol("dvStoredEnergy"*_n)][b, ts] for ts in p.time_steps)
