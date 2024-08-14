@@ -177,6 +177,9 @@ function build_mpc!(m::JuMP.AbstractModel, p::MPCInputs)
 		add_MG_production_constraints(m,p)
 		if !isempty(p.s.storage.types.elec)	
 			add_MG_storage_dispatch_constraints(m,p)
+			if !isempty(p.techs.dc_couple_with_stor)
+				add_MG_dc_coupled_tech_elec_storage_constraints(m, p)
+			end
 		else
 			fix_MG_storage_variables(m,p)
 		end

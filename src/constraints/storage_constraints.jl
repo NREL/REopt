@@ -53,7 +53,8 @@ function add_elec_storage_dispatch_constraints(m, p, b; _n="")
 	# Constraint (4g): state-of-charge for electrical storage - with grid
 	@constraint(m, [ts in p.time_steps_with_grid],
         m[Symbol("dvStoredEnergy"*_n)][b, ts] == m[Symbol("dvStoredEnergy"*_n)][b, ts-1] + p.hours_per_time_step * (  
-            sum(p.s.storage.attr[b].charge_efficiency * m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for t in p.techs.elec) 
+            sum(p.s.storage.attr[b].charge_efficiency * m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for t in p.techs.ac_couple_with_stor) 
+            + sum(p.s.storage.attr[b].charge_efficiency * m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for t in p.techs.dc_couple_with_stor) 
             + p.s.storage.attr[b].grid_charge_efficiency * m[Symbol("dvGridToStorage"*_n)][b, ts] 
             - m[Symbol("dvDischargeFromStorage"*_n)][b,ts] / p.s.storage.attr[b].discharge_efficiency
         )
@@ -62,7 +63,8 @@ function add_elec_storage_dispatch_constraints(m, p, b; _n="")
 	# Constraint (4h): state-of-charge for electrical storage - no grid
 	@constraint(m, [ts in p.time_steps_without_grid],
         m[Symbol("dvStoredEnergy"*_n)][b, ts] == m[Symbol("dvStoredEnergy"*_n)][b, ts-1] + p.hours_per_time_step * (  
-            sum(p.s.storage.attr[b].charge_efficiency * m[Symbol("dvProductionToStorage"*_n)][b,t,ts] for t in p.techs.elec) 
+            sum(p.s.storage.attr[b].charge_efficiency * m[Symbol("dvProductionToStorage"*_n)][b,t,ts] for t in p.techs.ac_couple_with_stor) 
+            + sum(p.s.storage.attr[b].charge_efficiency * m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for t in p.techs.dc_couple_with_stor) 
             - m[Symbol("dvDischargeFromStorage"*_n)][b, ts] / p.s.storage.attr[b].discharge_efficiency
         )
     )
@@ -98,6 +100,36 @@ function add_elec_storage_dispatch_constraints(m, p, b; _n="")
         @constraint(m, avg_soc >= p.s.storage.attr[b].minimum_avg_soc_fraction * 
             sum(m[Symbol("dvStorageEnergy"*_n)][b])
         )
+    end
+end
+
+function add_dc_coupled_tech_elec_storage_constraints(m, p, b; _n="")
+    # # Constraint (4d)-1: Lower bound on DC coupled PV and battery inverter power capacity (inverter direction)
+    # @constraint(m, [ts in p.time_steps],
+    #     m[Symbol("dvDCCoupledTechStorageInverterSize"*_n)][b] >= 
+    #     m[Symbol("dvDischargeFromStorage"*_n)][b,ts]
+    #     - sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for t in p.techs.ac_couple_with_stor)
+    #     + sum(p.production_factor[t, ts] * p.levelization_factor[t] * m[Symbol("dvRatedProduction"*_n)][t,ts]
+    #         - m[Symbol("dvProductionToStorage"*_n)][b, t, ts]
+    #         - m[Symbol("dvCurtail"*_n)][t, ts] for t in p.techs.dc_couple_with_stor)
+    # )
+
+    # # Constraint (4d)-2: Lower bound on DC coupled PV and battery inverter power capacity (rectifier direction)
+    # @constraint(m, [ts in p.time_steps],
+    #     m[Symbol("dvDCCoupledTechStorageInverterSize"*_n)][b] >= 
+    #     - m[Symbol("dvDischargeFromStorage"*_n)][b,ts]
+    #     + sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for t in p.techs.ac_couple_with_stor)
+    #     - sum(p.production_factor[t, ts] * p.levelization_factor[t] * m[Symbol("dvRatedProduction"*_n)][t,ts]
+    #         - m[Symbol("dvProductionToStorage"*_n)][b, t, ts]
+    #         - m[Symbol("dvCurtail"*_n)][t, ts] for t in p.techs.dc_couple_with_stor)
+    # )
+
+    # Constraint (4d)-3: Don't let AC coupled elec techs charge battery. 
+    # Future development could make this an option by adding a bool input and creating the set p.techs.elec_cannot_charge_stor that is different than p.techs.ac_couple_with_stor
+    for ts in p.time_steps
+        for t in p.techs.ac_couple_with_stor
+            fix(m[:dvProductionToStorage][b,t,ts], 0.0, force=true)
+        end
     end
 end
 

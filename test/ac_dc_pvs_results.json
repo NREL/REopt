@@ -1,0 +1,68 @@
+{
+    "Messages": {
+        "errors": [
+            [
+                "ErrorException(\"Constraints of type MathOptInterface.VectorAffineFunction{Float64}-in-MathOptInterface.Indicator{MathOptInterface.ACTIVATE_ON_ONE, MathOptInterface.GreaterThan{Float64}} are not supported by the solver.\\n\\nIf you expected the solver to support your problem, you may have an error in your formulation. Otherwise, consider using a different solver.\\n\\nThe list of available solvers, along with the problem types they support, is available at https://jump.dev/JuMP.jl/stable/installation/#Supported-solvers.\")",
+                [
+                    "error(s::String) at error.jl:35",
+                    "_moi_add_constraint(model::MathOptInterface.Utilities.CachingOptimizer{MathOptInterface.Bridges.LazyBridgeOptimizer{HiGHS.Optimizer}, MathOptInterface.Utilities.UniversalFallback{MathOptInterface.Utilities.Model{Float64}}}, f::MathOptInterface.VectorAffineFunction{Float64}, s::MathOptInterface.Indicator{MathOptInterface.ACTIVATE_ON_ONE, MathOptInterface.GreaterThan{Float64}}) at constraints.jl:679",
+                    "add_constraint(model::Model, con::VectorConstraint{AffExpr, MathOptInterface.Indicator{MathOptInterface.ACTIVATE_ON_ONE, MathOptInterface.GreaterThan{Float64}}, VectorShape}, name::String) at constraints.jl:706",
+                    "macro expansion at macros.jl:1345 [inlined]",
+                    "(::REopt.var\"#226#229\"{REoptInputs{Scenario}, Model})(t::String) at macro.jl:301",
+                    "#87 at container.jl:124 [inlined]",
+                    "iterate at generator.jl:47 [inlined]",
+                    "collect(itr::Base.Generator{JuMP.Containers.VectorizedProductIterator{Tuple{Vector{String}}}, JuMP.Containers.var\"#87#89\"{REopt.var\"#226#229\"{REoptInputs{Scenario}, Model}}}) at array.jl:834",
+                    "map(f::Function, A::JuMP.Containers.VectorizedProductIterator{Tuple{Vector{String}}}) at abstractarray.jl:3313",
+                    "container(f::Function, indices::JuMP.Containers.VectorizedProductIterator{Tuple{Vector{String}}}, ::Type{JuMP.Containers.DenseAxisArray}, names::Vector{Any}) at container.jl:123",
+                    "container at container.jl:75 [inlined]",
+                    "macro expansion at macros.jl:1213 [inlined]",
+                    "add_outage_cost_constraints(m::Model, p::REoptInputs{Scenario}) at outage_constraints.jl:37",
+                    "build_reopt!(m::Model, p::REoptInputs{Scenario}) at reopt.jl:385",
+                    "run_reopt(m::Model, p::REoptInputs{Scenario}; organize_pvs::Bool) at reopt.jl:535",
+                    "run_reopt at reopt.jl:532 [inlined]",
+                    "run_reopt(m::Model, d::Dict{String, Any}) at reopt.jl:52",
+                    "macro expansion at debugging_tests.jl:15 [inlined]",
+                    "macro expansion at Test.jl:1577 [inlined]",
+                    "top-level scope at debugging_tests.jl:6",
+                    "eval at boot.jl:385 [inlined]",
+                    "include_string(mapexpr::typeof(identity), mod::Module, code::String, filename::String) at loading.jl:2076",
+                    "_include(mapexpr::Function, mod::Module, _path::String) at loading.jl:2136",
+                    "include(fname::String) at client.jl:489",
+                    "macro expansion at runtests.jl:15 [inlined]",
+                    "macro expansion at Test.jl:1577 [inlined]",
+                    "top-level scope at runtests.jl:15",
+                    "eval at boot.jl:385 [inlined]",
+                    "include_string(mapexpr::typeof(identity), mod::Module, code::String, filename::String) at loading.jl:2076",
+                    "_include(mapexpr::Function, mod::Module, _path::String) at loading.jl:2136",
+                    "include(fname::String) at client.jl:489",
+                    "top-level scope at none:6",
+                    "eval at boot.jl:385 [inlined]",
+                    "exec_options(opts::Base.JLOptions) at client.jl:291",
+                    "_start() at client.jl:552"
+                ]
+            ]
+        ],
+        "has_stacktrace": true,
+        "warnings": [
+            [
+                "core_electric_utility.jl_187",
+                [
+                    "When using stochastic outage modeling (i.e. outage_start_time_steps, outage_durations, outage_probabilities), \n                    emissions and renewable energy percentage calculations and constraints do not consider outages."
+                ]
+            ],
+            [
+                "core_reopt.jl_641",
+                [
+                    "Adding binary variable to model outages. Some solvers are very slow with integer variables"
+                ]
+            ],
+            [
+                "core_pv.jl_152",
+                [
+                    "PV inv_eff will be ignored because dc_coupled_with_storage=true. The inverter of the DC coupled PV and electric storage system will be defined by ElectricStorage inverter_efficiency_fraction and rectifier_efficiency_fraction."
+                ]
+            ]
+        ]
+    },
+    "status": "error"
+}

@@ -8,9 +8,9 @@ function get_production_factor(pv::PV, latitude::Real, longitude::Real; timefram
     end
 
     watts, ambient_temp_celcius = call_pvwatts_api(latitude, longitude; tilt=pv.tilt, azimuth=pv.azimuth, module_type=pv.module_type, 
-        array_type=pv.array_type, losses=round(pv.losses*100, digits=3), dc_ac_ratio=pv.dc_ac_ratio,
-        gcr=pv.gcr, inv_eff=pv.inv_eff*100, timeframe=timeframe, radius=pv.radius,
-        time_steps_per_hour=time_steps_per_hour)
+                                                    array_type=pv.array_type, losses=round(pv.losses*100, digits=3), dc_ac_ratio=pv.dc_ac_ratio,
+                                                    gcr=pv.gcr, inv_eff=pv.inv_eff*100, timeframe=timeframe, radius=pv.radius,
+                                                    time_steps_per_hour=time_steps_per_hour, dc_coupled_with_storage=pv.dc_coupled_with_storage)
 
     return watts
 

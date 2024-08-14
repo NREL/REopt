@@ -44,6 +44,7 @@
     can_export_beyond_nem_limit::Bool = off_grid_flag ? false : true,
     can_curtail::Bool = true,
     operating_reserve_required_fraction::Real = off_grid_flag ? 0.25 : 0.0, # if off grid, 25%, else 0%. Applied to each time_step as a % of PV generation.
+    dc_coupled_with_storage::Bool = false
 ```
 
 !!! note "Multiple PV types" 
@@ -97,6 +98,7 @@ mutable struct PV <: AbstractTech
     can_export_beyond_nem_limit
     can_curtail
     operating_reserve_required_fraction
+    dc_coupled_with_storage
 
     function PV(;
         off_grid_flag::Bool = false,
@@ -143,7 +145,12 @@ mutable struct PV <: AbstractTech
         can_export_beyond_nem_limit::Bool = off_grid_flag ? false : true,
         can_curtail::Bool = true,
         operating_reserve_required_fraction::Real = off_grid_flag ? 0.25 : 0.0, # if off grid, 25%, else 0%. Applied to each time_step as a % of PV generation.
+        dc_coupled_with_storage::Bool = false
         )
+
+        if dc_coupled_with_storage
+            @warn "PV inv_eff will be ignored because dc_coupled_with_storage=true. The inverter of the DC coupled PV and electric storage system will be defined by ElectricStorage inverter_efficiency_fraction and rectifier_efficiency_fraction."
+        end
 
         if !(off_grid_flag) && !(operating_reserve_required_fraction == 0.0)
             @warn "PV operating_reserve_required_fraction applies only when true. Setting operating_reserve_required_fraction to 0.0 for this on-grid analysis."
@@ -233,7 +240,8 @@ mutable struct PV <: AbstractTech
             can_wholesale,
             can_export_beyond_nem_limit,
             can_curtail,
-            operating_reserve_required_fraction
+            operating_reserve_required_fraction,
+            dc_coupled_with_storage
         )
     end
 end

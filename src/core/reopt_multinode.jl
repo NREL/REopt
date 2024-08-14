@@ -125,6 +125,9 @@ function build_reopt!(m::JuMP.AbstractModel, ps::AbstractVector{REoptInputs{T}})
                 add_general_storage_dispatch_constraints(m, p, b; _n=_n)
 				if b in p.s.storage.types.elec
 					add_elec_storage_dispatch_constraints(m, p, b; _n=_n)
+					if !isempty(p.techs.dc_couple_with_stor)
+						add_dc_coupled_tech_elec_storage_constraints(m, p, b; _n=_n)
+					end
 				elseif b in p.s.storage.types.hot
 					add_hot_thermal_storage_dispatch_constraints(m, p, b; _n=_n)
 				elseif b in p.s.storage.types.cold

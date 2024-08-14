@@ -440,13 +440,13 @@ end
 
 """
     call_pvwatts_api(latitude::Real, longitude::Real; tilt=latitude, azimuth=180, module_type=0, array_type=1, 
-        losses=14, dc_ac_ratio=1.2, gcr=0.4, inv_eff=96, timeframe="hourly", radius=0, time_steps_per_hour=1)
+        losses=14, dc_ac_ratio=1.2, gcr=0.4, inv_eff=96, timeframe="hourly", radius=0, time_steps_per_hour=1, dc_coupled_with_storage=false)
 This calls the PVWatts API and returns both:
  - PV production factor
  - Ambient outdoor air dry bulb temperature profile [Celcius]
 """
 function call_pvwatts_api(latitude::Real, longitude::Real; tilt=latitude, azimuth=180, module_type=0, array_type=1, 
-    losses=14, dc_ac_ratio=1.2, gcr=0.4, inv_eff=96, timeframe="hourly", radius=0, time_steps_per_hour=1)
+    losses=14, dc_ac_ratio=1.2, gcr=0.4, inv_eff=96, timeframe="hourly", radius=0, time_steps_per_hour=1, dc_coupled_with_storage = false)
     
     # Determine resource dataset to use for this location
     dataset, dist_meters, datasource  = call_solar_dataset_api(latitude, longitude, radius)
@@ -468,7 +468,8 @@ function call_pvwatts_api(latitude::Real, longitude::Real; tilt=latitude, azimut
         end
         @info "PVWatts success."
         # Get both possible data of interest
-        watts = collect(get(response["outputs"], "ac", []) / 1000)  # scale to 1 kW system (* 1 kW / 1000 W)
+        pv_profile_key = dc_coupled_with_storage ? "ac" : "ac"
+        watts = collect(get(response["outputs"], pv_profile_key, []) / 1000)  # scale to 1 kW system (* 1 kW / 1000 W)
         tamb_celcius = collect(get(response["outputs"], "tamb", []))  # Celcius
         # Validate outputs
         if length(watts) != 8760

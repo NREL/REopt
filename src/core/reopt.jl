@@ -144,17 +144,26 @@ function run_reopt(ms::AbstractArray{T, 1}, p::REoptInputs) where T <: JuMP.Abst
 		Threads.@threads for i = 1:2
 			rs[i] = run_reopt(inputs[i])
 		end
-		if typeof(rs[1]) <: Dict && typeof(rs[2]) <: Dict && rs[1]["status"] != "error" && rs[2]["status"] != "error"
-			# TODO when a model is infeasible the JuMP.Model is returned from run_reopt (and not the results Dict)
-			results_dict = combine_results(p, rs[1], rs[2], bau_inputs.s)
-			results_dict["Financial"] = merge(results_dict["Financial"], proforma_results(p, results_dict))
-			if !isempty(p.techs.pv)
-				organize_multiple_pv_results(p, results_dict)
-			end
-			return results_dict
-		else
-			throw(@error("REopt scenarios solved either with errors or non-optimal solutions."))
+		if !(typeof(rs[1]) <: Dict && typeof(rs[2]) <: Dict)
+			failed_scenarios = typeof(rs[1]) <: Dict ? "with-DERs scenario" : (typeof(rs[2]) <: Dict ? "business-as-usual scenario" : "scenarios")
+			throw(@error(string("REopt ", failed_scenarios," solved with non-optimal solution.")))
 		end
+		if rs[1]["status"] == "error"
+			if rs[2]["status"] == "error"
+				merge!(rs[1]["Messages"]["errors"], rs[2]["Messages"]["errors"])
+				merge!(rs[1]["Messages"]["warnings"], rs[2]["Messages"]["warnings"])
+			end
+			return rs[1]
+		elseif rs[2]["status"] == "error"
+			return rs[2]
+		end
+		# TODO when a model is infeasible the JuMP.Model is returned from run_reopt (and not the results Dict)
+		results_dict = combine_results(p, rs[1], rs[2], bau_inputs.s)
+		results_dict["Financial"] = merge(results_dict["Financial"], proforma_results(p, results_dict))
+		if !isempty(p.techs.pv)
+			organize_multiple_pv_results(p, results_dict)
+		end
+		return results_dict
 	catch e
 		if isnothing(e) # Error thrown by REopt
 			handle_errors()
@@ -236,6 +245,9 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 			add_general_storage_dispatch_constraints(m, p, b)
 			if b in p.s.storage.types.elec
 				add_elec_storage_dispatch_constraints(m, p, b)
+				if !isempty(p.techs.dc_couple_with_stor)
+					add_dc_coupled_tech_elec_storage_constraints(m, p, b)
+				end
 			elseif b in p.s.storage.types.hot
 				add_hot_thermal_storage_dispatch_constraints(m, p, b)
 			elseif b in p.s.storage.types.cold
@@ -404,6 +416,9 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 		add_MG_production_constraints(m,p)
 		if !isempty(p.s.storage.types.elec)
 			add_MG_storage_dispatch_constraints(m,p)
+			if !isempty(p.techs.dc_couple_with_stor)
+				add_MG_dc_coupled_tech_elec_storage_constraints(m, p)
+			end
 		else
 			fix_MG_storage_variables(m,p)
 		end
@@ -557,7 +572,6 @@ function run_reopt(m::JuMP.AbstractModel, p::REoptInputs; organize_pvs=true)
 		if organize_pvs && !isempty(p.techs.pv)  # do not want to organize_pvs when running BAU case in parallel b/c then proform code fails
 			organize_multiple_pv_results(p, results)
 		end
-
 		# add error messages (if any) and warnings to results dict
 		results["Messages"] = logger_to_dict()
 
@@ -595,6 +609,10 @@ function add_variables!(m::JuMP.AbstractModel, p::REoptInputs)
 		MinChargeAdder >= 0
         binGHP[p.ghp_options], Bin  # Can be <= 1 if require_ghp_purchase=0, and is ==1 if require_ghp_purchase=1
 	end
+
+	# if !isempty(p.techs.dc_couple_with_stor)
+	# 	@variable(m, dvDCCoupledTechStorageInverterSize[p.s.storage.types.elec] >= 0)   # Power capacity of the DC coupled PV and electric storage system b [kW]
+	# end
 
 	if !isempty(p.techs.gen)  # Problem becomes a MILP
 		@warn "Adding binary variable to model gas generator. Some solvers are very slow with integer variables."
