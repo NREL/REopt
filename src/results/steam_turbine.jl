@@ -12,6 +12,9 @@
 - `electric_to_load_series_kw` Electric power to serve load series [kW]
 - `thermal_to_storage_series_mmbtu_per_hour` Thermal production to charge the HotThermalStorage series [MMBtu/hr]
 - `thermal_to_load_series_mmbtu_per_hour` Thermal production to serve the heating load SERVICES [MMBtu/hr]
+- `thermal_to_dhw_load_series_mmbtu_per_hour` Thermal production to serve the domestic hot water heating load [MMBtu/hr]
+- `thermal_to_space_heating_load_series_mmbtu_per_hour` Thermal production to serve the space heating load [MMBtu/hr]
+- `thermal_to_process_heat_load_series_mmbtu_per_hour` Thermal production to serve the process heating load [MMBtu/hr]
 
 !!! note "'Series' and 'Annual' energy outputs are average annual"
 	REopt performs load balances using average annual production values for technologies that include degradation. 

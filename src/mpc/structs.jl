@@ -1,4 +1,16 @@
 # REopt®, Copyright (c) Alliance for Sustainable Energy, LLC. See also https://github.com/NREL/REopt.jl/blob/master/LICENSE.
+
+"""
+    MPCSite
+
+    Base.@kwdef struct MPCSite
+        include_exported_elec_emissions_in_total::Bool = true,
+    end
+"""
+Base.@kwdef struct MPCSite
+    include_exported_elec_emissions_in_total::Bool = true
+end
+
 """
     MPCElectricLoad
 
@@ -10,6 +22,7 @@
 Base.@kwdef struct MPCElectricLoad
     loads_kw::Array{Real,1}
     critical_loads_kw::Union{Nothing, Array{Real,1}} = nothing
+    min_load_met_annual_fraction::Real = 1.0
 end
 
 
@@ -22,6 +35,7 @@ end
 """
 Base.@kwdef struct MPCFinancial
     value_of_lost_load_per_kwh::Union{Array{R,1}, R} where R<:Real = 1.00
+    CO2_cost_per_tonne::Real = 51.0
 end
 
 
@@ -39,6 +53,23 @@ Base.@kwdef struct MPCPV
     name::String="PV"
     size_kw::Real = 0
     production_factor_series::Union{Nothing, Array{Real,1}} = nothing
+end
+
+
+"""
+    MPCWind
+```julia
+Base.@kwdef struct MPCWind
+    size_kw::Real = 0
+    production_factor_series::Union{Nothing, Array{Real,1}} = nothing
+end
+```
+"""
+Base.@kwdef struct MPCWind
+    size_kw::Real = 0
+    production_factor_series::Union{Nothing, Array{Real,1}} = nothing
+    om_cost_per_kw::Real = 0.0
+    operating_reserve_required_fraction::Real = 0.0
 end
 
 
@@ -221,27 +252,30 @@ end
 Base.@kwdef struct MPCElectricStorage < AbstractElectricStorage
     size_kw::Float64
     size_kwh::Float64
-    charge_efficiency::Float64 =  0.96 * 0.975^2
-    discharge_efficiency::Float64 =  0.96 * 0.975^2
+    charge_efficiency::Float64 =  0.96 * 0.975^0.5
+    discharge_efficiency::Float64 =  0.96 * 0.975^0.5
     soc_min_fraction::Float64 = 0.2
     soc_init_fraction::Float64 = 0.5
     can_grid_charge::Bool = true
-    grid_charge_efficiency::Float64 = 0.96 * 0.975^2
+    grid_charge_efficiency::Float64 = can_grid_charge ? charge_efficiency : 0.0
+    daily_leakage_fraction::Float64 = 0.03
 end
 ```
 """
 Base.@kwdef struct MPCElectricStorage <: AbstractElectricStorage
     size_kw::Float64
     size_kwh::Float64
-    charge_efficiency::Float64 = 0.96 * 0.975^2
-    discharge_efficiency::Float64 = 0.96 * 0.975^2
+    charge_efficiency::Float64 = 0.96 * 0.975^0.5
+    discharge_efficiency::Float64 = 0.96 * 0.975^0.5
     soc_min_fraction::Float64 = 0.2
     soc_init_fraction::Float64 = 0.5
     can_grid_charge::Bool = true
-    grid_charge_efficiency::Float64 = 0.96 * 0.975^2
+    grid_charge_efficiency::Float64 = can_grid_charge ? charge_efficiency : 0.0
     max_kw::Float64 = size_kw
     max_kwh::Float64 = size_kwh
     minimum_avg_soc_fraction::Float64 = 0.0
+    daily_leakage_fraction::Float64 = 0.03
+    fixed_dispatch_series::Union{Nothing, Array{Real,1}} = nothing
 end
 
 
@@ -308,22 +342,274 @@ struct MPCGenerator <: AbstractGenerator
     end
 end
 
+#HYDROGEN TECHS
+"""
+    MPCElectrolyzer
+
+```julia
+Base.@kwdef struct MPCElectrolyzer < AbstractElectrolyzer
+    size_kw::Float64
+    efficiency_kwh_per_kg::Float64 =  54.3
+    om_cost_per_kwh::Float64 = 0.006
+end
+```
+"""
+Base.@kwdef struct MPCElectrolyzer <: AbstractElectrolyzer
+    size_kw::Float64
+    efficiency_kwh_per_kg::Float64 =  54.3
+    om_cost_per_kwh::Float64 = 0.006
+end
+
+"""
+    MPCHydrogenStorageLP
+
+```julia
+Base.@kwdef struct MPCHydrogenStorageLP < AbstractHydrogenStorage
+    size_kg::Float64
+    soc_min_fraction::Float64 = 0.01
+    soc_init_fraction::Float64 = 0.5
+    daily_leakage_fraction::Float64 = 0.0006667
+    max_kg::Float64 = size_kg
+    minimum_avg_soc_fraction::Float64 = 0.0
+end
+```
+"""
+Base.@kwdef struct MPCHydrogenStorageLP <: AbstractHydrogenStorage
+    size_kg::Float64
+    soc_min_fraction::Float64 = 0.01
+    soc_init_fraction::Float64 = 0.5
+    daily_leakage_fraction::Float64 = 0.0006667
+    max_kg::Float64 = size_kg
+    minimum_avg_soc_fraction::Float64 = 0.0
+end
+
+"""
+    MPCFuelCell
+
+```julia
+Base.@kwdef struct MPCFuelCell < AbstractFuelCell
+    size_kw::Float64
+    efficiency_kwh_per_kg::Float64 =  16.745
+    om_cost_per_kwh::Float64 = 0.0013
+end
+```
+"""
+Base.@kwdef struct MPCFuelCell <: AbstractFuelCell
+    size_kw::Float64
+    efficiency_kwh_per_kg::Float64 =  16.745
+    om_cost_per_kwh::Float64 = 0.0013
+end
+
+"""
+    MPCHydrogenLoad
+
+```julia
+Base.@kwdef struct MPCHydrogenLoad
+    loads_kg::Array{Real,1}
+end
+```
+"""
+Base.@kwdef struct MPCHydrogenLoad
+    loads_kg::Array{Real,1} = Real[]
+end
+
+"""
+    MPCCompressor
+
+```julia
+Base.@kwdef struct MPCCompressor < AbstractCompressor
+    size_kw::Float64
+    efficiency_kwh_per_kg::Float64 = 3.5
+    om_cost_per_kg::Float64 = 0.0
+end
+```
+"""
+Base.@kwdef struct MPCCompressor <: AbstractCompressor
+    size_kw::Float64
+    efficiency_kwh_per_kg::Float64 = 3.5
+    om_cost_per_kg::Float64 = 0.0
+end
+
+"""
+    MPCHydrogenStorageHP
+
+```julia
+Base.@kwdef struct MPCHydrogenStorageHP < AbstractHydrogenStorage
+    size_kg::Float64
+    soc_min_fraction::Float64 = 0.01
+    soc_init_fraction::Float64 = 0.5
+    daily_leakage_fraction::Float64 = 0.0006667
+    max_kg::Float64 = size_kg
+    minimum_avg_soc_fraction::Float64 = 0.0
+end
+```
+"""
+Base.@kwdef struct MPCHydrogenStorageHP <: AbstractHydrogenStorage
+    size_kg::Float64
+    soc_min_fraction::Float64 = 0.01
+    soc_init_fraction::Float64 = 0.5
+    daily_leakage_fraction::Float64 = 0.0006667
+    max_kg::Float64 = size_kg
+    minimum_avg_soc_fraction::Float64 = 0.0
+end
+
+
+# THERMAL TECHS
+"""
+MPCCoolingLoad
+
+```julia
+Base.@kwdef struct MPCProcessHeatLoad
+    loads_kw::Union{Nothing, Array{Real,1}} = nothing
+end
+```
+"""
+struct MPCProcessHeatLoad
+    loads_kw#::Union{Nothing, Array{Real,1}} = nothing
+    # production_factor_series::Union{Nothing, Array{Real,1}} = nothing
+    function MPCProcessHeatLoad(;
+        heat_loads_mmbtu_per_hour::Array{<:Real,1} = Real[],
+    )
+        loads_kw = heat_loads_mmbtu_per_hour * KWH_PER_MMBTU 
+        new(loads_kw)
+    end
+end
 
 """
     MPCCoolingLoad
 
-    Base.@kwdef struct MPCCoolingLoad
-        loads_kw_thermal::Array{Real,1}
+```julia
+Base.@kwdef struct MPCElectricHeater <: AbstractThermalTech
+    size_kw::Real
+    cop::Real
+    can_serve_dhw::Bool
+    can_serve_space_heating::Bool
+    can_serve_process_heat::Bool
+end
+```
+"""
+struct MPCElectricHeater <: AbstractThermalTech
+    size_kw#::Real
+    cop#::Real
+    can_serve_dhw#::Bool
+    can_serve_space_heating#::Bool
+    can_serve_process_heat#::Bool
+
+    function MPCElectricHeater(;
+        size_mmbtu_per_hour::Real,
+        cop::Real = 1.0,
+        can_serve_dhw::Bool = true,
+        can_serve_space_heating::Bool = true,
+        can_serve_process_heat::Bool = true
+    )
+        # Convert max sizes, cost factors from mmbtu_per_hour to kw
+        size_kw = size_mmbtu_per_hour * KWH_PER_MMBTU
+        
+        new(
+            size_kw,
+            cop,
+            can_serve_dhw,
+            can_serve_space_heating,
+            can_serve_process_heat
+        )
     end
+end
+
+"""
+    MPCCoolingLoad
+
+```julia
+Base.@kwdef struct MPCCoolingLoad
+    loads_kw_thermal::Array{Real,1}
+end
+```
 """
 Base.@kwdef struct MPCCoolingLoad
     loads_kw_thermal::Array{Real,1}
     cop::Union{Real, Nothing}
 end
 
+"""
+    MPCDomesticHotWaterLoad
+
+```julia
+Base.@kwdef struct MPCDomesticHotWaterLoad
+    loads_kw_thermal::Array{Real,1}
+end
+```
+"""
+Base.@kwdef struct MPCDomesticHotWaterLoad
+    loads_kw_thermal::Array{Real,1}
+end
+
+"""
+    MPCSpaceHeatingLoad
+
+```julia
+Base.@kwdef struct MPCSpaceHeatingLoad
+    loads_kw_thermal::Array{Real,1}
+end
+```
+"""
+Base.@kwdef struct MPCSpaceHeatingLoad
+    loads_kw_thermal::Array{Real,1}
+end
+
+
+"""
+    MPCHighTempThermalStorage
+
+```julia
+Base.@kwdef struct MPCHighTempThermalStorage <: AbstractThermalStorage
+    charge_limit_kw::Float64
+    discharge_limit_kw::Float64
+    size_kwh::Float64
+    charge_efficiency::Float64 = 1.0
+    discharge_efficiency::Float64 = 0.9
+    soc_min_fraction::Float64 = 0.2
+    soc_init_fraction::Float64 = 0.5
+    can_grid_charge::Bool = true
+    grid_charge_efficiency::Float64 = can_grid_charge ? charge_efficiency : 0.0
+    size_kw::Float64 = charge_limit_kw + discharge_limit_kw
+    max_kw::Float64 = min(charge_limit_kw, discharge_limit_kw)
+    max_kwh::Float64 = size_kwh
+    minimum_avg_soc_fraction::Float64 = 0.0
+    thermal_decay_rate_fraction::Float64 = 0.0004
+    can_serve_dhw::Bool = true
+    can_serve_space_heating::Bool = true
+    can_serve_process_heat::Bool = true
+end
+```
+"""
+Base.@kwdef struct MPCHighTempThermalStorage <: AbstractThermalStorage
+    charge_limit_kw::Float64
+    discharge_limit_kw::Float64
+    size_kwh::Float64
+    charge_efficiency::Float64 = 1.0
+    discharge_efficiency::Float64 = 0.9
+    soc_min_fraction::Float64 = 0.2
+    soc_init_fraction::Float64 = 0.5
+    can_grid_charge::Bool = true
+    grid_charge_efficiency::Float64 = can_grid_charge ? charge_efficiency : 0.0
+    size_kw::Float64 = charge_limit_kw + discharge_limit_kw
+    max_kw::Float64 = min(charge_limit_kw, discharge_limit_kw)
+    max_kwh::Float64 = size_kwh
+    minimum_avg_soc_fraction::Float64 = 0.0
+    thermal_decay_rate_fraction::Float64 = 0.0004
+    can_serve_dhw::Bool = true
+    can_serve_space_heating::Bool = true
+    can_serve_process_heat::Bool = true
+end
 
 """
     MPCLimits
+
+```julia
+Base.@kwdef struct MPCLimits
+    grid_draw_limit_kw_by_time_step::Vector{<:Real} = Real[]
+    export_limit_kw_by_time_step::Vector{<:Real} =  Real[]
+end
+```
 
 struct for MPC specific input parameters:
 - `grid_draw_limit_kw_by_time_step::Vector{<:Real}` limits for grid power consumption in each time step; length must be same as `length(loads_kw)`.

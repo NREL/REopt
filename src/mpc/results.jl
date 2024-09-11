@@ -8,6 +8,8 @@ MPC Scenarios will return a results Dict with the following keys:
 - `ElectricUtility`
 - `PV`
 - `Generator`
+- `Electrolyzer`
+- `FuelCell`
 """
 function mpc_results(m::JuMP.AbstractModel, p::MPCInputs; _n="")
 	tstart = time()
@@ -40,9 +42,41 @@ function mpc_results(m::JuMP.AbstractModel, p::MPCInputs; _n="")
         add_pv_results(m, p, d; _n)
 	end
 
+    if "Wind" in p.techs.all
+        add_wind_results(m, p, d; _n)
+	end
+
 	if !isempty(p.techs.gen)
         add_generator_results(m, p, d; _n)
 	end
+
+    if !isempty(p.techs.electrolyzer)
+        add_electrolyzer_results(m, p, d; _n)
+    end
+
+    if !isempty(p.techs.fuel_cell)
+        add_fuel_cell_results(m, p, d; _n)
+    end
+
+    if !isempty(p.techs.compressor)
+        add_compressor_results(m, p, d; _n)
+        add_hydrogen_load_results(m, p, d; _n)
+    end
+
+    for b in p.s.storage.types.hydrogen
+        if p.s.storage.attr[b].size_kg > 0
+            if b in p.s.storage.types.hydrogen_lp
+                add_hydrogen_storage_lp_results(m, p, d, b; _n)
+            elseif b in p.s.storage.types.hydrogen_hp
+                add_hydrogen_storage_hp_results(m, p, d, b; _n)
+            end
+        end
+    end
+
+    if !isempty(p.techs.electric_heater)
+        add_heating_load_results(m, p, d; _n)
+        add_electric_heater_results(m, p, d; _n)
+    end
 
     d["Costs"] = value(m[Symbol("Costs"*_n)])
 	

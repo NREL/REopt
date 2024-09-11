@@ -41,7 +41,12 @@ function add_electric_load_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dic
     nothing
 end
 
-
+"""
+MPC `ElectricLoad` results keys:
+- `load_series_kw` vector of site load in every time step
+- `offgrid_load_met_series_kw` vector of electric load met by generation techs, for off-grid scenarios only
+- `offgrid_load_met_fraction` percentage of total electric load met, for off-grid scenarios only
+"""
 function add_electric_load_results(m::JuMP.AbstractModel, p::MPCInputs, d::Dict; _n="")
     # Adds the `ElectricLoad` results to the dictionary passed back from `run_reopt` using the solved model `m` and the `REoptInputs` for node `_n`.
     # Note: the node number is an empty string if evaluating a single `Site`.
@@ -49,6 +54,15 @@ function add_electric_load_results(m::JuMP.AbstractModel, p::MPCInputs, d::Dict;
     r = Dict{String, Any}()
 
     r["load_series_kw"] = p.s.electric_load.loads_kw
+    r["critical_load_series_kw"] = p.s.electric_load.critical_loads_kw
+    
+    if p.s.settings.off_grid_flag
+        @expression(m, LoadMet[ts in p.time_steps_without_grid], p.s.electric_load.critical_loads_kw[ts] * m[Symbol("dvOffgridLoadServedFraction"*_n)][ts])
+        r["offgrid_load_met_series_kw"] =  round.(value.(LoadMet).data, digits=6)
+        @expression(m, LoadMetPct, sum(p.s.electric_load.critical_loads_kw[ts] * m[Symbol("dvOffgridLoadServedFraction"*_n)][ts] for ts in p.time_steps_without_grid) /
+                sum(p.s.electric_load.critical_loads_kw))
+        r["offgrid_load_met_fraction"] = round(value(LoadMetPct), digits=6)
+    end
     
     d["ElectricLoad"] = r
     nothing

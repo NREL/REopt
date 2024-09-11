@@ -69,3 +69,64 @@ function add_wind_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dict; _n="")
 	d[t] = r
     nothing
 end
+
+"""
+MPC `Wind` results keys:
+- `electric_to_storage_series_kw`
+- `electric_to_grid_series_kw`
+- `electric_curtailed_series_kw`
+- `electric_to_load_series_kw`
+- `electric_to_electrolyzer_series_kw`
+- `electric_to_compressor_series_kw`
+- `energy_produced_kwh`
+"""
+function add_wind_results(m::JuMP.AbstractModel, p::MPCInputs, d::Dict; _n="")
+
+	r = Dict{String, Any}()
+	t = "Wind"
+	if !isempty(p.s.storage.types.elec) 
+		WindtoBatt = (sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.elec) for ts in p.time_steps)
+		WindtoBatt = round.(value.(WindtoBatt), digits=3)
+	else
+		WindtoBatt = zeros(length(p.time_steps))
+	end
+	r["electric_to_storage_series_kw"] = WindtoBatt
+
+	if !isempty(p.s.electric_tariff.export_bins)
+		WindtoGrid = @expression(m, [ts in p.time_steps],
+				sum(m[Symbol("dvProductionToGrid"*_n)][t, u, ts] for u in p.export_bins_by_tech[t]))
+		r["electric_to_grid_series_kw"] = round.(value.(WindtoGrid), digits=3).data
+	else
+		r["electric_to_grid_series_kw"] = zeros(length(p.time_steps))
+	end
+
+	if !isempty(p.techs.electrolyzer)
+		WindtoElectrolyzer = (m[Symbol("dvProductionToElectrolyzer"*_n)][t, ts] for ts in p.time_steps)
+		r["electric_to_electrolyzer_series_kw"] = round.(value.(WindtoElectrolyzer), digits=3)
+	else
+		r["electric_to_electrolyzer_series_kw"] = zeros(length(p.time_steps))
+	end
+
+	if !isempty(p.techs.compressor)
+		WindtoCompressor = (m[Symbol("dvProductionToCompressor"*_n)][t, ts] for ts in p.time_steps)
+		r["electric_to_compressor_series_kw"] = round.(value.(WindtoCompressor), digits=3)
+	else
+		r["electric_to_compressor_series_kw"] = zeros(length(p.time_steps))
+	end
+	
+	WindtoCUR = (m[Symbol("dvCurtail"*_n)][t, ts] for ts in p.time_steps)
+	r["electric_curtailed_series_kw"] = round.(value.(WindtoCUR), digits=3)
+	WindtoLoad = (m[Symbol("dvRatedProduction"*_n)][t, ts] * p.production_factor[t, ts] * p.levelization_factor[t]
+				- r["electric_curtailed_series_kw"][ts]
+				- r["electric_to_grid_series_kw"][ts]
+				- r["electric_to_storage_series_kw"][ts]
+				- r["electric_to_electrolyzer_series_kw"][ts]
+				- r["electric_to_compressor_series_kw"][ts] for ts in p.time_steps
+	)
+	r["electric_to_load_series_kw"] = round.(value.(WindtoLoad), digits=3)
+	WindProd = (sum(m[Symbol("dvRatedProduction"*_n)][t,ts] * p.production_factor[t, ts] for ts in p.time_steps) * p.hours_per_time_step)
+	r["energy_produced_kwh"] = round(value(WindProd), digits=0)        
+	d[t] = r
+	
+    nothing
+end

@@ -104,6 +104,28 @@ function reopt_results(m::JuMP.AbstractModel, p::REoptInputs; _n="")
         add_electric_heater_results(m, p, d; _n)
     end
     
+    if !isempty(p.techs.electrolyzer)
+        add_electrolyzer_results(m, p, d; _n)
+    end
+
+    if !isempty(p.techs.compressor) && p.s.electrolyzer.require_compression
+        add_compressor_results(m, p, d; _n)
+    end
+
+    if sum(p.s.hydrogen_load.loads_kg) != 0
+        add_hydrogen_load_results(m, p, d; _n)
+    end
+
+    if !isempty(p.techs.fuel_cell)
+        add_fuel_cell_results(m, p, d; _n)
+    end
+
+    for b in p.s.storage.types.hydrogen
+        if p.s.storage.attr[b].max_kg > 0
+            add_hydrogen_storage_results(m, p, d, b; _n)
+        end
+    end
+
     return d
 end
 

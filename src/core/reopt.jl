@@ -204,7 +204,20 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 	end
 
 	for b in p.s.storage.types.all
-		if p.s.storage.attr[b].max_kw == 0 || p.s.storage.attr[b].max_kwh == 0
+
+		if b in p.s.storage.types.hydrogen
+			if p.s.storage.attr[b].max_kg == 0
+				@constraint(m, [ts in p.time_steps], m[:dvStoredEnergy][b, ts] == 0)
+				@constraint(m, m[:dvStorageEnergy][b] == 0)
+				@constraint(m, [ts in p.time_steps], m[:dvDischargeFromStorage][b, ts] == 0)
+				@constraint(m, [t in p.techs.elec, ts in p.time_steps_with_grid],
+					m[:dvProductionToStorage][b, t, ts] == 0)
+			else
+				add_hydrogen_storage_size_constraints(m, p, b)
+				add_general_storage_dispatch_constraints(m, p, b)
+				add_hydrogen_storage_dispatch_constraints(m, p, b)
+			end
+		elseif p.s.storage.attr[b].max_kw == 0 || p.s.storage.attr[b].max_kwh == 0
 			@constraint(m, [ts in p.time_steps], m[:dvStoredEnergy][b, ts] == 0)
 			@constraint(m, m[:dvStorageEnergy][b] == 0)
 			@constraint(m, [ts in p.time_steps], m[:dvDischargeFromStorage][b, ts] == 0)
@@ -246,10 +259,7 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 		end
 	end
 
-	if any(max_kw->max_kw > 0, (p.s.storage.attr[b].max_kw for b in p.s.storage.types.elec))
-		add_storage_sum_constraints(m, p)
-	end
-
+	add_storage_sum_constraints(m, p)
 	add_production_constraints(m, p)
 
     m[:TotalTechCapCosts] = 0.0
@@ -331,6 +341,58 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 			)
         end
 
+		if !isempty(p.techs.electrolyzer)
+            add_electrolyzer_constraints(m, p)
+			m[:TotalPerUnitProdOMCosts] += m[:TotalElectrolyzerPerUnitProdOMCosts]
+		else
+			@constraint(m, [t in p.techs.elec, ts in p.time_steps],
+					m[:dvProductionToElectrolyzer][t, ts] == 0)
+			@constraint(m, [ts in p.time_steps], m[:dvGridToElectrolyzer][ts] == 0)
+			@constraint(m, [b in p.s.storage.types.elec, ts in p.time_steps],
+					m[:dvStorageToElectrolyzer][b, ts] == 0)
+			@constraint(m, [t in p.techs.electrolyzer, ts in p.time_steps],
+					m[:dvRatedProduction][t,ts] == 0)
+			@constraint(m, [t in p.techs.elec, ts in p.time_steps],
+					m[:dvProductionToCompressor][t, ts] == 0)
+			@constraint(m, [ts in p.time_steps], m[:dvGridToCompressor][ts] == 0)
+			@constraint(m, [b in p.s.storage.types.elec, ts in p.time_steps],
+					m[:dvStorageToCompressor][b, ts] == 0)
+			@constraint(m, [t in p.techs.compressor, ts in p.time_steps],
+					m[:dvRatedProduction][t,ts] == 0)
+			@constraint(m, [t in p.techs.compressor, ts in p.time_steps],
+					m[:dvProductionToStorage]["HydrogenStorage",t,ts] == 0)
+        end
+
+		if !isempty(p.techs.compressor)
+			if !p.s.electrolyzer.require_compression
+				@constraint(m, [t in p.techs.elec, ts in p.time_steps],
+						m[:dvProductionToCompressor][t, ts] == 0)
+				@constraint(m, [ts in p.time_steps], m[:dvGridToCompressor][ts] == 0)
+				@constraint(m, [b in p.s.storage.types.elec, ts in p.time_steps],
+						m[:dvStorageToCompressor][b, ts] == 0)
+			end
+            add_compressor_constraints(m, p)
+			m[:TotalPerUnitProdOMCosts] += m[:TotalCompressorPerUnitProdOMCosts]
+		else
+			@constraint(m, [t in p.techs.elec, ts in p.time_steps],
+					m[:dvProductionToCompressor][t, ts] == 0)
+			@constraint(m, [ts in p.time_steps], m[:dvGridToCompressor][ts] == 0)
+			@constraint(m, [b in p.s.storage.types.elec, ts in p.time_steps],
+					m[:dvStorageToCompressor][b, ts] == 0)
+			@constraint(m, [t in p.techs.compressor, ts in p.time_steps],
+					m[:dvRatedProduction][t,ts] == 0)
+			@constraint(m, [t in p.techs.compressor, ts in p.time_steps],
+					m[:dvProductionToStorage]["HydrogenStorage",t,ts] == 0)
+        end
+
+		if !isempty(p.techs.fuel_cell)
+            add_fuel_cell_constraints(m, p)
+			m[:TotalPerUnitProdOMCosts] += m[:TotalFuelCellPerUnitProdOMCosts]
+		else
+			@constraint(m, [t in p.techs.fuel_cell, ts in p.time_steps],
+				m[:dvRatedProduction][t,ts] == 0)
+        end
+		
         if !isempty(p.techs.pbi)
             @warn "Adding binary variable(s) to model production based incentives"
             add_prod_incent_vars_and_constraints(m, p)
@@ -389,7 +451,8 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 	
 	@expression(m, TotalStorageCapCosts, p.third_party_factor * (
 		sum( p.s.storage.attr[b].net_present_cost_per_kw * m[:dvStoragePower][b] for b in p.s.storage.types.elec) + 
-		sum( p.s.storage.attr[b].net_present_cost_per_kwh * m[:dvStorageEnergy][b] for b in p.s.storage.types.all )
+		sum( p.s.storage.attr[b].net_present_cost_per_kwh * m[:dvStorageEnergy][b] for b in p.s.storage.types.nonhydrogen) + 
+		sum( p.s.storage.attr[b].net_present_cost_per_kg * m[:dvStorageEnergy][b] for b in p.s.storage.types.hydrogen)
 	))
 	
 	@expression(m, TotalPerUnitSizeOMCosts, p.third_party_factor * p.pwf_om *
@@ -405,11 +468,24 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 		if !isempty(p.s.storage.types.elec)
 			add_MG_storage_dispatch_constraints(m,p)
 		else
-			fix_MG_storage_variables(m,p)
+			fix_MG_elec_storage_variables(m,p)
 		end
+		
+		if !isempty(p.techs.fuel_cell)
+			#Fuel cell can't curtail
+			for s in p.s.electric_utility.scenarios, tz in p.s.electric_utility.outage_start_time_steps, ts in p.s.electric_utility.outage_time_steps
+				fix(m[:dvMGCurtail]["FuelCell", s, tz, ts], 0.0, force=true)
+			end
+			add_MG_hydrogen_constraints(m,p)
+		else
+			@constraint(m, [s in p.s.electric_utility.scenarios, tz in p.s.electric_utility.outage_start_time_steps, ts in p.s.electric_utility.outage_time_steps],
+				m[:binMGFCIsOnInTS][s, tz, ts] == 0
+			)
+			fix_MG_hydrogen_variables(m,p)
+		end
+		
 		add_cannot_have_MG_with_only_PVwind_constraints(m,p)
 		add_MG_size_constraints(m,p)
-		
 		m[:ExpectedMGFuelCost] = 0
         if !isempty(p.techs.gen)
 			add_MG_Gen_fuel_burn_constraints(m,p)
@@ -504,6 +580,15 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 				m[:dvStoredEnergy][b, ts] for b in p.s.storage.types.elec, ts in p.time_steps
 			) / (8760. / p.hours_per_time_step)
 	end
+	if !(isempty(p.s.storage.types.hydrogen)) && p.s.settings.add_soc_incentive
+		#TODO Need to test if using a roundtrip efficiency would be better for hydrogen SOC incentive
+		# hydrogen_roundtrip_efficiency = (p.s.compressor.efficiency_kwh_per_kg * p.s.electrolyzer.efficiency_kwh_per_kg *
+		# 								p.s.fuel_cell.efficiency_kwh_per_kg)
+		hydrogen_roundtrip_efficiency = 1
+		m[:ObjectivePenalties] += -1 * sum(
+				hydrogen_roundtrip_efficiency * m[:dvStoredEnergy][b, ts] for b in p.s.storage.types.hydrogen, ts in p.time_steps
+			) / (8760. / p.hours_per_time_step)
+	end
 	# 3. Incentive to minimize unserved load in each outage, not just the max over outage start times
 	if !isempty(p.s.electric_utility.outage_durations)
 		m[:ObjectivePenalties] += sum(sum(0.0001 * m[:dvUnservedLoad][s, tz, ts] for ts in 1:p.s.electric_utility.outage_durations[s]) 
@@ -586,10 +671,16 @@ function add_variables!(m::JuMP.AbstractModel, p::REoptInputs)
 		dvCurtail[p.techs.all, p.time_steps] >= 0  # [kW]
 		dvProductionToStorage[p.s.storage.types.all, union(p.techs.ghp,p.techs.all), p.time_steps] >= 0  # Power from technology t used to charge storage system b [kW]
 		dvDischargeFromStorage[p.s.storage.types.all, p.time_steps] >= 0 # Power discharged from storage system b [kW]
+		dvProductionToElectrolyzer[p.techs.elec, p.time_steps] >= 0
+		dvProductionToCompressor[p.techs.elec, p.time_steps] >= 0
 		dvGridToStorage[p.s.storage.types.elec, p.time_steps] >= 0 # Electrical power delivered to storage by the grid [kW]
+		dvGridToElectrolyzer[p.time_steps] >= 0
+		dvGridToCompressor[p.time_steps] >= 0
 		dvStoredEnergy[p.s.storage.types.all, 0:p.time_steps[end]] >= 0  # State of charge of storage system b
 		dvStoragePower[p.s.storage.types.all] >= 0   # Power capacity of storage system b [kW]
 		dvStorageEnergy[p.s.storage.types.all] >= 0   # Energy capacity of storage system b [kWh]
+		dvStorageToElectrolyzer[p.s.storage.types.elec, p.time_steps] >= 0
+		dvStorageToCompressor[p.s.storage.types.elec, p.time_steps] >= 0
 		dvPeakDemandTOU[p.ratchets, 1:p.s.electric_tariff.n_tou_demand_tiers] >= 0  # Peak electrical power demand during ratchet r [kW]
 		dvPeakDemandMonth[p.months, 1:p.s.electric_tariff.n_monthly_demand_tiers] >= 0  # Peak electrical power demand during month m [kW]
 		MinChargeAdder >= 0
@@ -626,6 +717,8 @@ function add_variables!(m::JuMP.AbstractModel, p::REoptInputs)
 			end
         end
 		if !isempty(p.s.storage.types.hot)
+			@variable(m, dvStorageChargePower[p.s.storage.types.hot] >= 0)
+			@variable(m, dvStorageDischargePower[p.s.storage.types.hot] >= 0)
 			@variable(m, dvHeatToStorage[p.s.storage.types.hot, union(p.techs.heating, p.techs.chp), p.heating_loads, p.time_steps] >= 0) # Power charged to hot storage b at quality q [kW]
 			@variable(m, dvHeatFromStorage[p.s.storage.types.hot, p.heating_loads, p.time_steps] >= 0) # Power discharged from hot storage system b for load q [kW]
     	end
@@ -652,14 +745,14 @@ function add_variables!(m::JuMP.AbstractModel, p::REoptInputs)
 		# TODO: currently defining more decision variables than necessary b/c using rectangular arrays, could use dicts of decision variables instead
         @variables m begin # if there is more than one specified outage, there can be more othan one outage start time
 			dvUnservedLoad[S, tZeros, outage_time_steps] >= 0 # unserved load not met by system
-			dvMGProductionToStorage[p.techs.elec, S, tZeros, outage_time_steps] >= 0 # Electricity going to the storage system during each time_step
-			dvMGDischargeFromStorage[S, tZeros, outage_time_steps] >= 0 # Electricity coming from the storage system during each time_step
-			dvMGRatedProduction[p.techs.elec, S, tZeros, outage_time_steps]  # MG Rated Production at every time_step.  Multiply by production_factor to get actual energy
-			dvMGStoredEnergy[S, tZeros, 0:max_outage_duration] >= 0 # State of charge of the MG storage system
+			dvMGProductionToStorage[union(p.s.storage.types.elec, p.s.storage.types.hydrogen), union(p.techs.elec, p.techs.electrolyzer, p.techs.compressor), S, tZeros, outage_time_steps] >= 0 # Electricity going to the storage system during each time_step
+			dvMGDischargeFromStorage[union(p.s.storage.types.elec, p.s.storage.types.hydrogen), S, tZeros, outage_time_steps] >= 0 # Electricity coming from the storage system during each time_step
+			dvMGRatedProduction[union(p.techs.elec, p.techs.electrolyzer, p.techs.compressor), S, tZeros, outage_time_steps]  # MG Rated Production at every time_step.  Multiply by production_factor to get actual energy
+			dvMGStoredEnergy[union(p.s.storage.types.elec, p.s.storage.types.hydrogen), S, tZeros, 0:max_outage_duration] >= 0 # State of charge of the MG storage system
 			dvMaxOutageCost[S] >= 0 # maximum outage cost dependent on number of outage durations
 			dvMGTechUpgradeCost[p.techs.elec] >= 0
 			dvMGStorageUpgradeCost >= 0
-			dvMGsize[p.techs.elec] >= 0
+			dvMGsize[union(p.techs.elec, p.techs.electrolyzer, p.techs.compressor)] >= 0
 			
 			dvMGFuelUsed[p.techs.elec, S, tZeros] >= 0
             dvMGGenMaxFuelUsage[S] >= 0
@@ -670,9 +763,15 @@ function add_variables!(m::JuMP.AbstractModel, p::REoptInputs)
 
 			binMGStorageUsed, Bin # 1 if MG storage battery used, 0 otherwise
 			binMGTechUsed[p.techs.elec], Bin # 1 if MG tech used, 0 otherwise
+			binMGFCIsOnInTS[S, tZeros, outage_time_steps], Bin
 			binMGGenIsOnInTS[S, tZeros, outage_time_steps], Bin
             binMGCHPIsOnInTS[S, tZeros, outage_time_steps], Bin
             dvMGCHPFuelBurnYIntercept[S, tZeros] >= 0
+
+			dvMGProductionToElectrolyzer[p.techs.elec, S, tZeros, outage_time_steps] >= 0
+			dvMGProductionToCompressor[p.techs.elec, S, tZeros, outage_time_steps] >= 0
+			dvMGStorageToElectrolyzer[p.s.storage.types.elec, S, tZeros, outage_time_steps] >= 0
+			dvMGStorageToCompressor[p.s.storage.types.elec, S, tZeros, outage_time_steps] >= 0
 		end
 	end
 

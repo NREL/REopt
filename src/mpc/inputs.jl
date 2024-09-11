@@ -24,7 +24,11 @@ struct MPCInputs <: AbstractInputs
     thermal_cop::Dict{String, Float64}  # (techs.absorption_chiller)
     ghp_options::UnitRange{Int64}  # Range of the number of GHP options
     fuel_cost_per_kwh::Dict{String, AbstractArray}  # Fuel cost array for all time_steps
+    heating_cop::Dict{String, <:Real} # (techs.electric_heater)
     heating_loads::Vector{String} # list of heating loads
+    heating_loads_kw::Dict{String, Array{Real,1}} # (heating_loads)
+    heating_loads_served_by_tes::Dict{String, Array{String,1}} # ("HotThermalStorage" or empty)
+    absorption_chillers_using_heating_load::Dict{String,Array{String,1}} 
 end
 
 
@@ -44,7 +48,7 @@ function MPCInputs(s::MPCScenario)
 
     time_steps = 1:length(s.electric_load.loads_kw)
     hours_per_time_step = 1 / s.settings.time_steps_per_hour
-    techs, production_factor, existing_sizes, fuel_cost_per_kwh = setup_tech_inputs(s)
+    techs, production_factor, existing_sizes, fuel_cost_per_kwh, heating_cop = setup_tech_inputs(s)
     months = 1:length(s.electric_tariff.monthly_demand_rates)
 
     techs_by_exportbin = DenseAxisArray([ techs.all, techs.all, techs.all], s.electric_tariff.export_bins)
@@ -69,7 +73,34 @@ function MPCInputs(s::MPCScenario)
     cop = Dict("ExistingChiller" => s.cooling_load.cop)
     thermal_cop = Dict{String, Float64}()
     ghp_options = 1:0
+
+    # Set up heating loads
     heating_loads = Vector{String}()
+    heating_loads_kw = Dict{String, Array{Real,1}}()
+    if !isnothing(s.process_heat_load)
+        push!(heating_loads, "ProcessHeat")
+        heating_loads_kw["ProcessHeat"] = s.process_heat_load.loads_kw
+    end
+
+    heating_loads_served_by_tes = Dict{String,Array{String,1}}()
+    if !isempty(s.storage.types.hot)
+        for b in s.storage.types.hot
+            heating_loads_served_by_tes[b] = String[]
+            if s.storage.attr[b].can_serve_dhw && !isnothing(s.dhw_load)
+                push!(heating_loads_served_by_tes[b],"DomesticHotWater")
+            end
+            if s.storage.attr[b].can_serve_space_heating && !isnothing(s.space_heating_load)
+                push!(heating_loads_served_by_tes[b],"SpaceHeating")
+            end
+            if s.storage.attr[b].can_serve_process_heat && !isnothing(s.process_heat_load)
+                push!(heating_loads_served_by_tes[b],"ProcessHeat")
+            end
+        end
+    end
+    absorption_chillers_using_heating_load = Dict{String,Array{String,1}}()
+    absorption_chillers_using_heating_load["DomesticHotWater"] = Vector{String}()
+    absorption_chillers_using_heating_load["SpaceHeating"] = Vector{String}()
+    absorption_chillers_using_heating_load["ProcessHeat"] = Vector{String}()
 
     MPCInputs(
         s,
@@ -99,13 +130,16 @@ function MPCInputs(s::MPCScenario)
         # s.site.mg_tech_sizes_equal_grid_sizes,
         # s.site.node,
         fuel_cost_per_kwh,
-        heating_loads
+        heating_cop,
+        heating_loads,
+        heating_loads_kw,
+        heating_loads_served_by_tes,
+        absorption_chillers_using_heating_load
     )
 end
 
 
 function setup_tech_inputs(s::MPCScenario)
-
     techs = Techs(s)
 
     time_steps = 1:length(s.electric_load.loads_kw)
@@ -114,16 +148,39 @@ function setup_tech_inputs(s::MPCScenario)
     existing_sizes = Dict(t => 0.0 for t in techs.all)
     production_factor = DenseAxisArray{Float64}(undef, techs.all, time_steps)
     fuel_cost_per_kwh = Dict{String, AbstractArray}()
-
+    heating_cop = Dict(t => 0.0 for t in techs.electric_heater)
+    
     if !isempty(techs.pv)
         setup_pv_inputs(s, existing_sizes, production_factor)
+    end
+
+    if "Wind" in techs.all
+        setup_wind_inputs(s, existing_sizes, production_factor)
     end
 
     if "Generator" in techs.all
         setup_gen_inputs(s, existing_sizes, production_factor, fuel_cost_per_kwh)
     end
 
-    return techs, production_factor, existing_sizes, fuel_cost_per_kwh
+    if "ElectricHeater" in techs.all
+        setup_electric_heater_inputs(s, existing_sizes, production_factor, heating_cop)
+    else
+        heating_cop["ElectricHeater"] = 1.0
+    end
+
+    if "Electrolyzer" in techs.all
+        setup_electrolyzer_inputs(s, existing_sizes, production_factor)
+    end
+
+    if "FuelCell" in techs.all
+        setup_fuel_cell_inputs(s, existing_sizes, production_factor)
+    end
+
+    if "Compressor" in techs.all
+        setup_compressor_inputs(s, existing_sizes, production_factor)
+    end
+
+    return techs, production_factor, existing_sizes, fuel_cost_per_kwh, heating_cop
 end
 
 
@@ -135,11 +192,41 @@ function setup_pv_inputs(s::MPCScenario, existing_sizes, production_factor)
     return nothing
 end
 
+function setup_wind_inputs(s::MPCScenario, existing_sizes, production_factor)
+    existing_sizes["Wind"] = s.wind.size_kw
+    production_factor["Wind", :] = s.wind.production_factor_series
+    return nothing
+end
+
+function setup_electric_heater_inputs(s::MPCScenario, existing_sizes, production_factor, heating_cop)
+    existing_sizes["ElectricHeater"] = s.electric_heater.size_kw
+    production_factor["ElectricHeater", :] = ones(length(s.electric_load.loads_kw))
+    heating_cop["ElectricHeater"] = s.electric_heater.cop
+    return nothing
+end
 
 function setup_gen_inputs(s::MPCScenario, existing_sizes, production_factor, fuel_cost_per_kwh)
     existing_sizes["Generator"] = s.generator.size_kw
     production_factor["Generator", :] = ones(length(s.electric_load.loads_kw))
     generator_fuel_cost_per_kwh = s.generator.fuel_cost_per_gallon / s.generator.fuel_higher_heating_value_kwh_per_gal
     fuel_cost_per_kwh["Generator"] = per_hour_value_to_time_series(generator_fuel_cost_per_kwh, s.settings.time_steps_per_hour, "Generator")
+    return nothing
+end
+
+function setup_electrolyzer_inputs(s::MPCScenario, existing_sizes, production_factor)
+    existing_sizes["Electrolyzer"] = s.electrolyzer.size_kw
+    production_factor["Electrolyzer", :] = ones(length(s.electric_load.loads_kw))
+    return nothing
+end
+
+function setup_fuel_cell_inputs(s::MPCScenario, existing_sizes, production_factor)
+    existing_sizes["FuelCell"] = s.fuel_cell.size_kw
+    production_factor["FuelCell", :] = ones(length(s.electric_load.loads_kw))
+    return nothing
+end
+
+function setup_compressor_inputs(s::MPCScenario, existing_sizes, production_factor)
+    existing_sizes["Compressor"] = s.compressor.size_kw
+    production_factor["Compressor", :] = ones(length(s.hydrogen_load.loads_kg))
     return nothing
 end

@@ -3,15 +3,21 @@
 function add_elec_load_balance_constraints(m, p; _n="") 
 
 	##Constraint (8a): Electrical Load Balancing with Grid
-    if isempty(p.s.electric_tariff.export_bins)
+    if isempty(p.s.electric_tariff.export_bins)    
         conrefs = @constraint(m, [ts in p.time_steps_with_grid],
             sum(p.production_factor[t, ts] * p.levelization_factor[t] * m[Symbol("dvRatedProduction"*_n)][t,ts] for t in p.techs.elec)  
             + sum(m[Symbol("dvDischargeFromStorage"*_n)][b,ts] for b in p.s.storage.types.elec) 
             + sum(m[Symbol("dvGridPurchase"*_n)][ts, tier] for tier in 1:p.s.electric_tariff.n_energy_tiers)
             ==
             sum(sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.elec) 
+                + sum(m[Symbol("dvProductionToElectrolyzer"*_n)][t, ts]) 
+                + sum(m[Symbol("dvProductionToCompressor"*_n)][t, ts]) 
                 + m[Symbol("dvCurtail"*_n)][t, ts] for t in p.techs.elec)
-            + sum(m[Symbol("dvGridToStorage"*_n)][b, ts] for b in p.s.storage.types.elec)
+            + sum(m[Symbol("dvStorageToElectrolyzer"*_n)][b, ts] 
+                + m[Symbol("dvStorageToCompressor"*_n)][b, ts] 
+                + m[Symbol("dvGridToStorage"*_n)][b, ts] for b in p.s.storage.types.elec)
+            + m[Symbol("dvGridToElectrolyzer"*_n)][ts]
+            + m[Symbol("dvGridToCompressor"*_n)][ts]
             + sum(m[Symbol("dvCoolingProduction"*_n)][t, ts] / p.cop[t] for t in setdiff(p.techs.cooling,p.techs.ghp))
             + sum(m[Symbol("dvHeatingProduction"*_n)][t, q, ts] / p.heating_cop[t] for q in p.heating_loads, t in p.techs.electric_heater)
             + p.s.electric_load.loads_kw[ts]
@@ -21,13 +27,19 @@ function add_elec_load_balance_constraints(m, p; _n="")
     else
         conrefs = @constraint(m, [ts in p.time_steps_with_grid],
             sum(p.production_factor[t, ts] * p.levelization_factor[t] * m[Symbol("dvRatedProduction"*_n)][t,ts] for t in p.techs.elec)
-            + sum(m[Symbol("dvDischargeFromStorage"*_n)][b,ts] for b in p.s.storage.types.elec )
+            + sum(m[Symbol("dvDischargeFromStorage"*_n)][b,ts] for b in p.s.storage.types.elec)
             + sum(m[Symbol("dvGridPurchase"*_n)][ts, tier] for tier in 1:p.s.electric_tariff.n_energy_tiers)
             ==
             sum(sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.elec) 
                 + sum(m[Symbol("dvProductionToGrid"*_n)][t, u, ts] for u in p.export_bins_by_tech[t]) 
+                + sum(m[Symbol("dvProductionToElectrolyzer"*_n)][t, ts]) 
+                + sum(m[Symbol("dvProductionToCompressor"*_n)][t, ts])
                 + m[Symbol("dvCurtail"*_n)][t, ts] for t in p.techs.elec)
-            + sum(m[Symbol("dvGridToStorage"*_n)][b, ts] for b in p.s.storage.types.elec)
+            + sum(m[Symbol("dvGridToStorage"*_n)][b, ts] 
+                + m[Symbol("dvStorageToElectrolyzer"*_n)][b, ts] 
+                + m[Symbol("dvStorageToCompressor"*_n)][b, ts] for b in p.s.storage.types.elec)
+            + m[Symbol("dvGridToElectrolyzer"*_n)][ts]
+            + m[Symbol("dvGridToCompressor"*_n)][ts]
             + sum(m[Symbol("dvCoolingProduction"*_n)][t, ts] / p.cop[t] for t in setdiff(p.techs.cooling,p.techs.ghp))
             + sum(m[Symbol("dvHeatingProduction"*_n)][t, q, ts] / p.heating_cop[t] for q in p.heating_loads, t in p.techs.electric_heater)
             + p.s.electric_load.loads_kw[ts]
@@ -47,16 +59,24 @@ function add_elec_load_balance_constraints(m, p; _n="")
             + sum(m[Symbol("dvDischargeFromStorage"*_n)][b,ts] for b in p.s.storage.types.elec)
             ==
             sum(sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.elec) 
+                + m[Symbol("dvProductionToElectrolyzer"*_n)][t, ts]
+                + m[Symbol("dvProductionToCompressor"*_n)][t, ts]
                 + m[Symbol("dvCurtail"*_n)][t, ts] for t in p.techs.elec)
+            + sum(m[Symbol("dvStorageToElectrolyzer"*_n)][b, ts] 
+                + m[Symbol("dvStorageToCompressor"*_n)][b, ts] for b in p.s.storage.types.elec)
             + p.s.electric_load.critical_loads_kw[ts]
         )
-    else # load balancing constraint for off-grid runs 
+    else # load balancing constraint for off-grid runs - not altering off-grid to include hydrogen
         @constraint(m, [ts in p.time_steps_without_grid],
             sum(p.production_factor[t,ts] * p.levelization_factor[t] * m[Symbol("dvRatedProduction"*_n)][t,ts] for t in p.techs.elec)
             + sum(m[Symbol("dvDischargeFromStorage"*_n)][b,ts] for b in p.s.storage.types.elec)
             ==
             sum(sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.elec)
+                + m[Symbol("dvProductionToElectrolyzer"*_n)][t, ts]
+                + m[Symbol("dvProductionToCompressor"*_n)][t, ts]
                 + m[Symbol("dvCurtail"*_n)][t, ts] for t in p.techs.elec)
+            + sum(m[Symbol("dvStorageToElectrolyzer"*_n)][b, ts] 
+                + m[Symbol("dvStorageToCompressor"*_n)][b, ts] for b in p.s.storage.types.elec)
             + p.s.electric_load.critical_loads_kw[ts] * m[Symbol("dvOffgridLoadServedFraction"*_n)][ts]
         )
         ##Constraint : For off-grid scenarios, annual load served must be >= minimum percent specified
@@ -76,6 +96,8 @@ function add_production_constraints(m, p; _n="")
         @constraint(m, [t in p.techs.elec, ts in p.time_steps_with_grid],
             sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.elec)  
             + m[Symbol("dvCurtail"*_n)][t, ts]
+            + m[Symbol("dvProductionToElectrolyzer"*_n)][t, ts] 
+            + m[Symbol("dvProductionToCompressor"*_n)][t, ts]
             <= 
             p.production_factor[t, ts] * p.levelization_factor[t] * m[Symbol("dvRatedProduction"*_n)][t, ts]
         )
@@ -83,6 +105,8 @@ function add_production_constraints(m, p; _n="")
         @constraint(m, [t in p.techs.elec, ts in p.time_steps_with_grid],
             sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.elec)  
             + m[Symbol("dvCurtail"*_n)][t, ts]
+            + m[Symbol("dvProductionToElectrolyzer"*_n)][t, ts] 
+            + m[Symbol("dvProductionToCompressor"*_n)][t, ts]
             + sum(m[Symbol("dvProductionToGrid"*_n)][t, u, ts] for u in p.export_bins_by_tech[t])
             <= 
             p.production_factor[t, ts] * p.levelization_factor[t] * m[Symbol("dvRatedProduction"*_n)][t, ts]
@@ -92,6 +116,8 @@ function add_production_constraints(m, p; _n="")
 	# Constraint (4e): Electrical production sent to storage or curtailed must be less than technology's rated production - no grid
 	@constraint(m, [t in p.techs.elec, ts in p.time_steps_without_grid],
         sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for b in p.s.storage.types.elec)
+        + m[Symbol("dvProductionToElectrolyzer"*_n)][t, ts] 
+        + m[Symbol("dvProductionToCompressor"*_n)][t, ts]
         + m[Symbol("dvCurtail"*_n)][t, ts]  
         <= 
         p.production_factor[t, ts] * p.levelization_factor[t] * m[Symbol("dvRatedProduction"*_n)][t, ts]
@@ -116,7 +142,7 @@ function add_thermal_load_constraints(m, p; _n="")
 	##Constraint (5b): Hot thermal loads
     else    
         if !isempty(p.techs.heating)
-            
+
             if !isempty(p.techs.steam_turbine)
                 @constraint(m, HeatLoadBalanceCon[q in p.heating_loads, ts in p.time_steps_with_grid],
                     sum(m[Symbol("dvHeatingProduction"*_n)][t,q,ts] for t in union(p.techs.heating, p.techs.chp))

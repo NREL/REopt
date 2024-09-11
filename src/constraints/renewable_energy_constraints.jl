@@ -50,24 +50,53 @@ function add_re_elec_calcs(m,p)
 	# 	))
 	# end
 
-	m[:AnnualREEleckWh] = @expression(m,p.hours_per_time_step * (
-			sum(p.production_factor[t,ts] * p.levelization_factor[t] * m[:dvRatedProduction][t,ts] * 
-				p.tech_renewable_energy_fraction[t] for t in p.techs.elec, ts in p.time_steps
-			) - #total RE elec generation, excl steam turbine
-			sum(m[:dvProductionToStorage][b,t,ts]*p.tech_renewable_energy_fraction[t]*(
-				1-p.s.storage.attr[b].charge_efficiency*p.s.storage.attr[b].discharge_efficiency) 
-				for t in p.techs.elec, b in p.s.storage.types.elec, ts in p.time_steps
-			) - #minus battery efficiency losses
-			sum(m[:dvCurtail][t,ts]*p.tech_renewable_energy_fraction[t] for t in p.techs.elec, ts in p.time_steps) - # minus curtailment.
-			(1 - p.s.site.include_exported_renewable_electricity_in_total) *
-			sum(m[:dvProductionToGrid][t,u,ts]*p.tech_renewable_energy_fraction[t] 
-				for t in p.techs.elec,  u in p.export_bins_by_tech[t], ts in p.time_steps
-			) # minus exported RE, if RE accounting method = 0.
-		)
-		# + SteamTurbineAnnualREEleckWh  # SteamTurbine RE Elec, already adjusted for p.hours_per_time_step
-	)		
-    # Note: if battery ends up being allowed to discharge to grid, need to make sure only RE that is being consumed onsite is counted so battery doesn't become a back door for RE to grid.
-	# Note: calculations currently do not ascribe any renewable energy attribute to grid-purchased electricity
+	if :fuel_cell in fieldnames(typeof(p.s)) && !isnothing(p.s.fuel_cell)
+		m[:AnnualREEleckWh] = @expression(m,p.hours_per_time_step * (
+				sum(p.production_factor[t,ts] * p.levelization_factor[t] * m[:dvRatedProduction][t,ts] * 
+					p.tech_renewable_energy_fraction[t] for t in p.techs.elec, ts in p.time_steps
+				) - #total RE elec generation, excl steam turbine
+				sum(m[:dvProductionToStorage][b,t,ts]*p.tech_renewable_energy_fraction[t]*(
+					1-p.s.storage.attr[b].charge_efficiency*p.s.storage.attr[b].discharge_efficiency) 
+					for t in p.techs.elec, b in p.s.storage.types.elec, ts in p.time_steps
+				) - #minus battery efficiency losses
+				sum(m[:dvProductionToElectrolyzer][t,ts]*p.tech_renewable_energy_fraction[t]*(
+					1-(p.s.fuel_cell.efficiency_kwh_per_kg/(p.s.electrolyzer.efficiency_kwh_per_kg + p.s.compressor.efficiency_kwh_per_kg))) 
+					for t in p.techs.elec, ts in p.time_steps
+				) -
+				sum(m[:dvProductionToCompressor][t,ts]*p.tech_renewable_energy_fraction[t]*(
+					1-(p.s.fuel_cell.efficiency_kwh_per_kg/(p.s.electrolyzer.efficiency_kwh_per_kg + p.s.compressor.efficiency_kwh_per_kg))) 
+					for t in p.techs.elec, ts in p.time_steps
+				) - #minus hydrogen storage efficiency losses
+				sum(m[:dvCurtail][t,ts]*p.tech_renewable_energy_fraction[t] for t in p.techs.elec, ts in p.time_steps) - # minus curtailment.
+				(1 - p.s.site.include_exported_renewable_electricity_in_total) *
+				sum(m[:dvProductionToGrid][t,u,ts]*p.tech_renewable_energy_fraction[t] 
+					for t in p.techs.elec,  u in p.export_bins_by_tech[t], ts in p.time_steps
+				) # minus exported RE, if RE accounting method = 0.
+			)
+			# + SteamTurbineAnnualREEleckWh  # SteamTurbine RE Elec, already adjusted for p.hours_per_time_step
+		)		
+		# Note: if battery ends up being allowed to discharge to grid, need to make sure only RE that is being consumed onsite is counted so battery doesn't become a back door for RE to grid.
+		# Note: calculations currently do not ascribe any renewable energy attribute to grid-purchased electricity
+	else
+		m[:AnnualREEleckWh] = @expression(m,p.hours_per_time_step * (
+				sum(p.production_factor[t,ts] * p.levelization_factor[t] * m[:dvRatedProduction][t,ts] * 
+					p.tech_renewable_energy_fraction[t] for t in p.techs.elec, ts in p.time_steps
+				) - #total RE elec generation, excl steam turbine
+				sum(m[:dvProductionToStorage][b,t,ts]*p.tech_renewable_energy_fraction[t]*(
+					1-p.s.storage.attr[b].charge_efficiency*p.s.storage.attr[b].discharge_efficiency) 
+					for t in p.techs.elec, b in p.s.storage.types.elec, ts in p.time_steps
+				) - #minus battery efficiency losses
+				sum(m[:dvCurtail][t,ts]*p.tech_renewable_energy_fraction[t] for t in p.techs.elec, ts in p.time_steps) - # minus curtailment.
+				(1 - p.s.site.include_exported_renewable_electricity_in_total) *
+				sum(m[:dvProductionToGrid][t,u,ts]*p.tech_renewable_energy_fraction[t] 
+					for t in p.techs.elec,  u in p.export_bins_by_tech[t], ts in p.time_steps
+				) # minus exported RE, if RE accounting method = 0.
+			)
+			# + SteamTurbineAnnualREEleckWh  # SteamTurbine RE Elec, already adjusted for p.hours_per_time_step
+		)		
+		# Note: if battery ends up being allowed to discharge to grid, need to make sure only RE that is being consumed onsite is counted so battery doesn't become a back door for RE to grid.
+		# Note: calculations currently do not ascribe any renewable energy attribute to grid-purchased electricity
+	end
 
 	m[:AnnualEleckWh] = @expression(m,p.hours_per_time_step * (
 		 	# input electric load

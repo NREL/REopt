@@ -8,6 +8,9 @@
 - `thermal_to_storage_series_mmbtu_per_hour` # Thermal power production to TES (HotThermalStorage) series [MMBtu/hr]
 - `thermal_to_steamturbine_series_mmbtu_per_hour`
 - `thermal_to_load_series_mmbtu_per_hour`
+- `thermal_to_dhw_load_series_mmbtu_per_hour`
+- `thermal_to_space_heating_load_series_mmbtu_per_hour`
+- `thermal_to_process_heat_load_series_mmbtu_per_hour`
 - `lifecycle_fuel_cost_after_tax`
 - `year_one_fuel_cost_before_tax`
 

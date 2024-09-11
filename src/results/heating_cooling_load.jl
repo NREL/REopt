@@ -94,3 +94,17 @@ function add_heating_load_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dict
     d["HeatingLoad"] =   r
     nothing
 end
+
+"""
+MPC `HeatingLoad` results keys:
+- `process_heat_thermal_load_series_mmbtu_per_hour` vector of site space heating boiler load in every time step
+"""
+function add_heating_load_results(m::JuMP.AbstractModel, p::MPCInputs, d::Dict; _n="")
+
+    r = Dict{String, Any}()
+
+    r["process_heat_thermal_load_series_mmbtu_per_hour"] = p.s.process_heat_load.loads_kw ./ KWH_PER_MMBTU
+    
+    d["HeatingLoad"] = r
+    nothing
+end

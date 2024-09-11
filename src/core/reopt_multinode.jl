@@ -40,6 +40,30 @@ function add_variables!(m::JuMP.AbstractModel, ps::AbstractVector{REoptInputs{T}
 			m[Symbol(x)] = @variable(m, [p.s.storage.types.all, p.time_steps], base_name=x, lower_bound=0)
 		end
 
+		dv = "dvStorageToElectrolyzer"*_n
+		m[Symbol(dv)] = @variable(m, [p.s.storage.types.elec, p.time_steps], base_name=dv, lower_bound=0)
+
+		dv = "dvStorageToCompressor"*_n
+		m[Symbol(dv)] = @variable(m, [p.s.storage.types.elec, p.time_steps], base_name=dv, lower_bound=0)
+
+		dv = "dvProductionToElectrolyzer"*_n
+		m[Symbol(dv)] = @variable(m, [p.techs.elec, p.time_steps], base_name=dv, lower_bound=0)
+
+		dv = "dvProductionToCompressor"*_n
+		m[Symbol(dv)] = @variable(m, [p.techs.elec, p.time_steps], base_name=dv, lower_bound=0)
+
+		dv = "dvGridToStorage"*_n
+		m[Symbol(dv)] = @variable(m, [p.s.storage.types.elec, p.time_steps], base_name=dv, lower_bound=0)
+
+		dv = "dvGridPurchase"*_n
+		m[Symbol(dv)] = @variable(m, [p.time_steps], base_name=dv, lower_bound=0)
+
+		dv = "dvGridToElectrolyzer"*_n
+		m[Symbol(dv)] = @variable(m, [p.time_steps], base_name=dv, lower_bound=0)
+
+		dv = "dvGridToCompressor"*_n
+		m[Symbol(dv)] = @variable(m, [p.time_steps], base_name=dv, lower_bound=0)
+
 		dv = "dvGridToStorage"*_n
 		m[Symbol(dv)] = @variable(m, [p.s.storage.types.elec, p.time_steps], base_name=dv, lower_bound=0)
 

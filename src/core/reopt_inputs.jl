@@ -439,6 +439,21 @@ function setup_tech_inputs(s::AbstractScenario)
         setup_operating_reserve_fraction(s, techs_operating_reserve_req_fraction)
     end
 
+    if "Electrolyzer" in techs.all
+        setup_electrolyzer_inputs(s, max_sizes, min_sizes, existing_sizes, cap_cost_slope, om_cost_per_kw, production_factor, 
+            techs_by_exportbin, techs.segmented, n_segs_by_tech, seg_min_size, seg_max_size, seg_yint, techs)
+    end
+
+    if "Compressor" in techs.all
+        setup_compressor_inputs(s, max_sizes, min_sizes, existing_sizes, cap_cost_slope, om_cost_per_kw, production_factor, 
+            techs_by_exportbin, techs.segmented, n_segs_by_tech, seg_min_size, seg_max_size, seg_yint, techs)
+    end
+
+    if "FuelCell" in techs.all
+        setup_fuel_cell_inputs(s, max_sizes, min_sizes, existing_sizes, cap_cost_slope, om_cost_per_kw, production_factor, 
+            techs_by_exportbin, techs.segmented, n_segs_by_tech, seg_min_size, seg_max_size, seg_yint, techs, tech_renewable_energy_fraction)
+    end
+
     return techs, pv_to_location, maxsize_pv_locations, pvlocations, 
     production_factor, max_sizes, min_sizes, existing_sizes, cap_cost_slope, om_cost_per_kw, n_segs_by_tech, 
     seg_min_size, seg_max_size, seg_yint, techs_by_exportbin, export_bins_by_tech, boiler_efficiency,
@@ -632,6 +647,71 @@ function setup_wind_inputs(s::AbstractScenario, max_sizes, min_sizes, existing_s
     fillin_techs_by_exportbin(techs_by_exportbin, s.wind, "Wind")
     if !s.wind.can_curtail
         push!(techs.no_curtail, "Wind")
+    end
+    return nothing
+end
+
+
+function setup_electrolyzer_inputs(s::AbstractScenario, max_sizes, min_sizes, existing_sizes,
+    cap_cost_slope, om_cost_per_kw, production_factor, techs_by_exportbin,
+    segmented_techs, n_segs_by_tech, seg_min_size, seg_max_size, seg_yint, techs
+    )
+    max_sizes["Electrolyzer"] = s.electrolyzer.max_kw
+    min_sizes["Electrolyzer"] = s.electrolyzer.min_kw
+    existing_sizes["Electrolyzer"] = 0.0
+    
+    update_cost_curve!(s.electrolyzer, "Electrolyzer", s.financial,
+        cap_cost_slope, segmented_techs, n_segs_by_tech, seg_min_size, seg_max_size, seg_yint
+    )
+    om_cost_per_kw["Electrolyzer"] = s.electrolyzer.om_cost_per_kw
+    production_factor["Electrolyzer", :] = get_production_factor(s.electrolyzer; s.settings.time_steps_per_hour)
+    fillin_techs_by_exportbin(techs_by_exportbin, s.electrolyzer, "Electrolyzer")
+    if !s.electrolyzer.can_curtail
+        push!(techs.no_curtail, "Electrolyzer")
+    end
+    return nothing
+end
+
+
+function setup_compressor_inputs(s::AbstractScenario, max_sizes, min_sizes, existing_sizes,
+    cap_cost_slope, om_cost_per_kw, production_factor, techs_by_exportbin,
+    segmented_techs, n_segs_by_tech, seg_min_size, seg_max_size, seg_yint, techs
+    )
+    max_sizes["Compressor"] = s.compressor.max_kw
+    min_sizes["Compressor"] = s.compressor.min_kw
+    existing_sizes["Compressor"] = 0.0
+    
+    update_cost_curve!(s.compressor, "Compressor", s.financial,
+        cap_cost_slope, segmented_techs, n_segs_by_tech, seg_min_size, seg_max_size, seg_yint
+    )
+    om_cost_per_kw["Compressor"] = s.compressor.om_cost_per_kw
+    production_factor["Compressor", :] = get_production_factor(s.compressor; s.settings.time_steps_per_hour)
+    fillin_techs_by_exportbin(techs_by_exportbin, s.compressor, "Compressor")
+    if !s.compressor.can_curtail
+        push!(techs.no_curtail, "Compressor")
+    end
+    return nothing
+end
+
+function setup_fuel_cell_inputs(s::AbstractScenario, max_sizes, min_sizes, existing_sizes,
+    cap_cost_slope, om_cost_per_kw, production_factor, techs_by_exportbin,
+    segmented_techs, n_segs_by_tech, seg_min_size, seg_max_size, seg_yint, techs,
+    tech_renewable_energy_fraction
+    )
+    # TODO add tech_renewable_energy_fraction input for hydrogen assets; currently assumes 0
+    max_sizes["FuelCell"] = s.fuel_cell.max_kw
+    min_sizes["FuelCell"] = s.fuel_cell.min_kw
+    existing_sizes["FuelCell"] = 0.0
+    
+    update_cost_curve!(s.fuel_cell, "FuelCell", s.financial,
+        cap_cost_slope, segmented_techs, n_segs_by_tech, seg_min_size, seg_max_size, seg_yint
+    )
+    tech_renewable_energy_fraction["FuelCell"] = 0
+    om_cost_per_kw["FuelCell"] = s.fuel_cell.om_cost_per_kw
+    production_factor["FuelCell", :] = get_production_factor(s.fuel_cell; s.settings.time_steps_per_hour)
+    fillin_techs_by_exportbin(techs_by_exportbin, s.fuel_cell, "FuelCell")
+    if !s.fuel_cell.can_curtail
+        push!(techs.no_curtail, "FuelCell")
     end
     return nothing
 end
@@ -1191,7 +1271,7 @@ end
 
 function get_unavailability_by_tech(s::AbstractScenario, techs::Techs, time_steps)
     if !isempty(techs.elec)
-        unavailability = Dict(tech => zeros(length(time_steps)) for tech in techs.elec)
+        unavailability = Dict(tech => zeros(length(time_steps)) for tech in union(techs.elec, techs.electrolyzer, techs.compressor))
         if !isempty(techs.chp)
             unavailability["CHP"] = [s.chp.unavailability_hourly[i] for i in 1:8760 for _ in 1:s.settings.time_steps_per_hour]
         end

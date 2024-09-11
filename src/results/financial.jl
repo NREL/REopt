@@ -69,6 +69,7 @@ function add_financial_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dict; _
         m[Symbol("TotalCHPStandbyCharges"*_n)] = 0.0
     end
     r["lifecycle_chp_standby_cost_after_tax"] = value(m[Symbol("TotalCHPStandbyCharges"*_n)]) * (1 - p.s.financial.offtaker_tax_rate_fraction) # CHP standby
+    r["lifecycle_elecbill_before_tax"] = value(m[Symbol("TotalElecBill"*_n)])  # Total utility bill 
     r["lifecycle_elecbill_after_tax"] = value(m[Symbol("TotalElecBill"*_n)]) * (1 - p.s.financial.offtaker_tax_rate_fraction)  # Total utility bill 
     r["lifecycle_production_incentive_after_tax"] = value(m[Symbol("TotalProductionIncentive"*_n)])  * (1 - p.s.financial.owner_tax_rate_fraction)  # Production incentives
     if p.s.settings.off_grid_flag # Offgrid other annual and capital costs
@@ -150,6 +151,12 @@ function initial_capex(m::JuMP.AbstractModel, p::REoptInputs; _n="")
         end
     end
 
+    for b in p.s.storage.types.hydrogen
+        if p.s.storage.attr[b].max_kg > 0
+            initial_capex += p.s.storage.attr[b].installed_cost_per_kg * value.(m[Symbol("dvStorageEnergy"*_n)])[b]
+        end
+    end
+
     for b in p.s.storage.types.thermal
         if p.s.storage.attr[b].max_kw > 0
             initial_capex += p.s.storage.attr[b].installed_cost_per_kwh * value.(m[Symbol("dvStorageEnergy"*_n)])[b]
@@ -186,6 +193,18 @@ function initial_capex(m::JuMP.AbstractModel, p::REoptInputs; _n="")
         # chp_supp_firing_cost = self.inputs[tech].get("supplementary_firing_capital_cost_per_kw") or 0
         # initial_capex += chp_supp_firing_size * chp_supp_firing_cost
         end
+    end
+
+    if "Electrolyzer" in p.techs.all
+        initial_capex += p.s.electrolyzer.installed_cost_per_kw * value.(m[Symbol("dvPurchaseSize"*_n)])["Electrolyzer"]
+    end
+
+    if "Compressor" in p.techs.all
+        initial_capex += p.s.compressor.installed_cost_per_kw * value.(m[Symbol("dvPurchaseSize"*_n)])["Compressor"]
+    end
+
+    if "FuelCell" in p.techs.all
+        initial_capex += p.s.fuel_cell.installed_cost_per_kw * value.(m[Symbol("dvPurchaseSize"*_n)])["FuelCell"]
     end
 
     # TODO thermal tech costs

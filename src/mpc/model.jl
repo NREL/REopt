@@ -92,7 +92,21 @@ function build_mpc!(m::JuMP.AbstractModel, p::MPCInputs)
 	end
 
 	for b in p.s.storage.types.all
-		if p.s.storage.attr[b].size_kw == 0 || p.s.storage.attr[b].size_kwh == 0
+		if b in p.s.storage.types.hydrogen
+			if p.s.storage.attr[b].max_kg == 0
+				@constraint(m, [ts in p.time_steps], m[:dvDischargeFromStorage][b, ts] == 0)
+				@constraint(m, [ts in p.time_steps], m[:dvGridToStorage][b, ts] == 0)
+				@constraint(m, [t in p.techs.elec, ts in p.time_steps_with_grid],
+					m[:dvProductionToStorage][b, t, ts] == 0)
+			else
+				add_general_storage_dispatch_constraints(m, p, b)
+				if b in p.s.storage.types.hydrogen_lp
+					add_lp_hydrogen_storage_dispatch_constraints(m, p, b)
+				elseif b in p.s.storage.types.hydrogen_hp
+					add_hp_hydrogen_storage_dispatch_constraints(m, p, b)
+				end
+			end
+		elseif p.s.storage.attr[b].size_kw == 0 || p.s.storage.attr[b].size_kwh == 0
 			@constraint(m, [ts in p.time_steps], m[:dvStoredEnergy][b, ts] == 0)
 			@constraint(m, [t in p.techs.elec, ts in p.time_steps_with_grid],
 						m[:dvProductionToStorage][b, t, ts] == 0)
@@ -114,7 +128,9 @@ function build_mpc!(m::JuMP.AbstractModel, p::MPCInputs)
 		end
 	end
 
-	if any(size_kw->size_kw > 0, (p.s.storage.attr[b].size_kw for b in p.s.storage.types.all))
+	if any(size_kw->size_kw > 0, (p.s.storage.attr[b].size_kw for b in p.s.storage.types.elec))
+		add_storage_sum_constraints(m, p)
+	elseif any(size_kg->size_kg > 0, (p.s.storage.attr[b].size_kg for b in p.s.storage.types.hydrogen))
 		add_storage_sum_constraints(m, p)
 	end
 
@@ -127,6 +143,10 @@ function build_mpc!(m::JuMP.AbstractModel, p::MPCInputs)
 	end
 
 	add_elec_load_balance_constraints(m, p)
+
+	if !isempty(p.techs.electric_heater)
+		add_thermal_load_constraints(m, p) 
+	end
 
 	if !isempty(p.s.limits.grid_draw_limit_kw_by_time_step)
 		add_grid_draw_limits(m, p)
@@ -166,9 +186,62 @@ function build_mpc!(m::JuMP.AbstractModel, p::MPCInputs)
         m[:TotalFuelCosts] += m[:TotalGenFuelCosts]
 	end
 
+	if !isempty(p.techs.electrolyzer)
+		add_electrolyzer_constraints(m, p)
+		m[:TotalPerUnitProdOMCosts] += @expression(m,
+			sum(p.s.electrolyzer.om_cost_per_kwh * p.hours_per_time_step *
+			m[:dvRatedProduction][t, ts] for t in p.techs.electrolyzer, ts in p.time_steps))
+	else
+		@constraint(m, [t in p.techs.elec, ts in p.time_steps],
+				m[:dvProductionToElectrolyzer][t, ts] == 0)
+		@constraint(m, [ts in p.time_steps], m[:dvGridToElectrolyzer][ts] == 0)
+		@constraint(m, [b in p.s.storage.types.elec, ts in p.time_steps],
+				m[:dvStorageToElectrolyzer][b, ts] == 0)
+		@constraint(m, [t in p.techs.electrolyzer, ts in p.time_steps],
+				m[:dvRatedProduction][t,ts] == 0)
+		@constraint(m, [t in p.techs.electrolyzer, ts in p.time_steps],
+				m[:dvProductionToStorage]["HydrogenStorageLP",t,ts] == 0)
+
+		@constraint(m, [t in p.techs.elec, ts in p.time_steps],
+				m[:dvProductionToCompressor][t, ts] == 0)
+		@constraint(m, [ts in p.time_steps], m[:dvGridToCompressor][ts] == 0)
+		@constraint(m, [b in p.s.storage.types.elec, ts in p.time_steps],
+				m[:dvStorageToCompressor][b, ts] == 0)
+		@constraint(m, [t in p.techs.compressor, ts in p.time_steps],
+				m[:dvRatedProduction][t,ts] == 0)
+		@constraint(m, [t in p.techs.compressor, ts in p.time_steps],
+				m[:dvProductionToStorage]["HydrogenStorageHP",t,ts] == 0)
+	end
+
+	if !isempty(p.techs.fuel_cell)
+		add_fuel_cell_constraints(m, p)
+		m[:TotalPerUnitProdOMCosts] += @expression(m,
+			sum(p.s.fuel_cell.om_cost_per_kwh * p.hours_per_time_step *
+            m[:dvRatedProduction][t, ts] for t in p.techs.fuel_cell, ts in p.time_steps))
+	else
+		@constraint(m, [t in p.techs.fuel_cell, ts in p.time_steps],
+			m[:dvRatedProduction][t,ts] == 0)
+	end
+
+	if !isempty(p.techs.compressor)
+		add_compressor_constraints(m, p)
+		add_hydrogen_load_balance_constraints(m, p)
+	else
+		@constraint(m, [t in p.techs.elec, ts in p.time_steps],
+				m[:dvProductionToCompressor][t, ts] == 0)
+		@constraint(m, [ts in p.time_steps], m[:dvGridToCompressor][ts] == 0)
+		@constraint(m, [b in p.s.storage.types.elec, ts in p.time_steps],
+				m[:dvStorageToCompressor][b, ts] == 0)
+		@constraint(m, [t in p.techs.compressor, ts in p.time_steps],
+				m[:dvRatedProduction][t,ts] == 0)
+		@constraint(m, [t in p.techs.compressor, ts in p.time_steps],
+				m[:dvProductionToStorage]["HydrogenStorageHP",t,ts] == 0)
+	end
+
 	add_elec_utility_expressions(m, p)
     add_previous_monthly_peak_constraint(m, p)
     add_previous_tou_peak_constraint(m, p)
+	add_yr1_emissions_calcs(m,p)
 
     # TODO: random outages in MPC?
 	if !isempty(p.s.electric_utility.outage_durations)
@@ -178,7 +251,7 @@ function build_mpc!(m::JuMP.AbstractModel, p::MPCInputs)
 		if !isempty(p.s.storage.types.elec)	
 			add_MG_storage_dispatch_constraints(m,p)
 		else
-			fix_MG_storage_variables(m,p)
+			fix_MG_elec_storage_variables(m,p)
 		end
 		add_cannot_have_MG_with_only_PVwind_constraints(m,p)
 		add_MG_size_constraints(m,p)
@@ -214,6 +287,12 @@ function build_mpc!(m::JuMP.AbstractModel, p::MPCInputs)
 	if !isempty(p.s.electric_utility.outage_durations)
 		add_to_expression!(Costs, m[:ExpectedOutageCost] + m[:mgTotalTechUpgradeCost] + m[:dvMGStorageUpgradeCost] + m[:ExpectedMGFuelCost])
 	end
+	
+	# Add climate costs
+	if p.s.settings.include_climate_in_objective # if user selects to include climate in objective
+		add_to_expression!(Costs, m[:EmissionsYr1_Total_LbsCO2] * p.s.financial.CO2_cost_per_tonne * TONNE_PER_LB) 
+	end
+
     #= Note: 0.9999*MinChargeAdder in Objective b/c when TotalMinCharge > (TotalEnergyCharges + TotalDemandCharges + TotalExportBenefit + TotalFixedCharges)
 		it is arbitrary where the min charge ends up (eg. could be in TotalDemandCharges or MinChargeAdder).
 		0.0001*MinChargeAdder is added back into LCC when writing to results.  =#
@@ -230,16 +309,37 @@ function add_variables!(m::JuMP.AbstractModel, p::MPCInputs)
 		dvCurtail[p.techs.all, p.time_steps] >= 0  # [kW]
 		dvProductionToStorage[p.s.storage.types.all, p.techs.all, p.time_steps] >= 0  # Power from technology t used to charge storage system b [kW]
 		dvDischargeFromStorage[p.s.storage.types.all, p.time_steps] >= 0 # Power discharged from storage system b [kW]
+		dvProductionToElectrolyzer[p.techs.elec, p.time_steps] >= 0
+		dvProductionToCompressor[p.techs.elec, p.time_steps] >= 0
 		dvGridToStorage[p.s.storage.types.elec, p.time_steps] >= 0 # Electrical power delivered to storage by the grid [kW]
+		dvGridToElectrolyzer[p.time_steps] >= 0
+		dvGridToCompressor[p.time_steps] >= 0
 		dvStoredEnergy[p.s.storage.types.all, 0:p.time_steps[end]] >= 0  # State of charge of storage system b
 		dvStoragePower[p.s.storage.types.all] >= 0   # Power capacity of storage system b [kW]
 		dvStorageEnergy[p.s.storage.types.all] >= 0   # Energy capacity of storage system b [kWh]
+		dvStorageToElectrolyzer[p.s.storage.types.elec, p.time_steps] >= 0
+		dvStorageToCompressor[p.s.storage.types.elec, p.time_steps] >= 0
 		# TODO rm dvStoragePower/Energy dv's
 		dvPeakDemandTOU[p.ratchets, 1:1] >= 0  # Peak electrical power demand during ratchet r [kW]
 		dvPeakDemandMonth[p.months] >= 0  # Peak electrical power demand during month m [kW]
 		# MinChargeAdder >= 0
 	end
 	# TODO: tiers in MPC tariffs and variables?
+
+	# Thermal variables
+	if !isempty(p.techs.heating)
+        @variable(m, dvHeatingProduction[p.techs.heating, p.heating_loads, p.time_steps] >= 0)
+		@variable(m, dvProductionToWaste[p.techs.heating, p.heating_loads, p.time_steps] >= 0)
+		if !isempty(p.s.storage.types.hot)
+			@variable(m, dvStorageChargePower[p.s.storage.types.hot] >= 0)
+			@variable(m, dvStorageDischargePower[p.s.storage.types.hot] >= 0)
+			@variable(m, dvHeatToStorage[p.s.storage.types.hot, p.techs.heating, p.heating_loads, p.time_steps] >= 0) # Power charged to hot storage b at quality q [kW]
+			@variable(m, dvHeatFromStorage[p.s.storage.types.hot, p.heating_loads, p.time_steps] >= 0) # Power discharged from hot storage system b for load q [kW]
+    	end
+
+		# Placeholder variable for cooling
+		# @variable(m, dvCoolingProduction[p.techs.cooling, p.time_steps] >= 0)
+	end
 
 	if !isempty(p.s.electric_tariff.export_bins)
 		@variable(m, dvProductionToGrid[p.techs.elec, p.s.electric_tariff.export_bins, p.time_steps] >= 0)
@@ -248,8 +348,19 @@ function add_variables!(m::JuMP.AbstractModel, p::MPCInputs)
     m[:dvSize] = p.existing_sizes
 
 	for b in p.s.storage.types.all
-		fix(m[:dvStoragePower][b], p.s.storage.attr["ElectricStorage"].size_kw, force=true)
-		fix(m[:dvStorageEnergy][b], p.s.storage.attr["ElectricStorage"].size_kwh, force=true)
+		if b in p.s.storage.types.elec
+			fix(m[:dvStoragePower][b], p.s.storage.attr["ElectricStorage"].size_kw, force=true)
+			fix(m[:dvStorageEnergy][b], p.s.storage.attr["ElectricStorage"].size_kwh, force=true)
+		elseif b in p.s.storage.types.hydrogen_lp
+			fix(m[:dvStorageEnergy][b], p.s.storage.attr["HydrogenStorageLP"].size_kg, force=true)
+		elseif b in p.s.storage.types.hydrogen_hp
+			fix(m[:dvStorageEnergy][b], p.s.storage.attr["HydrogenStorageHP"].size_kg, force=true)
+		elseif b in p.s.storage.types.hot
+			fix(m[:dvStorageChargePower][b], p.s.storage.attr["HighTempThermalStorage"].charge_limit_kw, force=true)
+			fix(m[:dvStorageDischargePower][b], p.s.storage.attr["HighTempThermalStorage"].discharge_limit_kw, force=true)
+			# fix(m[:dvStoragePower][b], p.s.storage.attr["HighTempThermalStorage"].size_kw, force=true)
+			fix(m[:dvStorageEnergy][b], p.s.storage.attr["HighTempThermalStorage"].size_kwh, force=true)
+		end
 	end
 
 	# not modeling min charges since control does not affect them
@@ -297,6 +408,14 @@ function add_variables!(m::JuMP.AbstractModel, p::MPCInputs)
 			# binMGStorageUsed, Bin # 1 if MG storage battery used, 0 otherwise
 			# binMGTechUsed[p.techs.all], Bin # 1 if MG tech used, 0 otherwise
 			binMGGenIsOnInTS[S, tZeros, outage_time_steps], Bin
+		end
+	end
+
+	if p.s.settings.off_grid_flag
+		@variables m begin
+			# dvOpResFromBatt[p.s.storage.types.elec, p.time_steps_without_grid] >= 0 # Operating reserves provided by the electric storage [kW]
+			# dvOpResFromTechs[p.techs.providing_oper_res, p.time_steps_without_grid] >= 0 # Operating reserves provided by techs [kW]
+			1 >= dvOffgridLoadServedFraction[p.time_steps_without_grid] >= 0 # Critical load served in each time_step. Applied in off-grid scenarios only. [fraction]
 		end
 	end
 end

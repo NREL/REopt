@@ -10,6 +10,7 @@ struct Scenario <: AbstractScenario
     electric_utility::ElectricUtility
     financial::Financial
     generator::Generator
+    hydrogen_load::HydrogenLoad
     dhw_load::DomesticHotWaterLoad
     space_heating_load::SpaceHeatingLoad
     process_heat_load::ProcessHeatLoad
@@ -25,6 +26,9 @@ struct Scenario <: AbstractScenario
     cooling_thermal_load_reduction_with_ghp_kw::Union{Vector{Float64}, Nothing}
     steam_turbine::Union{SteamTurbine, Nothing}
     electric_heater::Union{ElectricHeater, Nothing}
+    electrolyzer::Union{Electrolyzer, Nothing}
+    compressor::Union{Compressor, Nothing}
+    fuel_cell::Union{FuelCell, Nothing}
 end
 
 """
@@ -40,6 +44,7 @@ A Scenario struct can contain the following keys:
 - [ElectricStorage](@ref) (optional)
 - [ElectricUtility](@ref) (optional)
 - [Generator](@ref) (optional)
+- [HydrogenLoad](@ref) (optional)
 - [DomesticHotWaterLoad](@ref) (optional)
 - [SpaceHeatingLoad](@ref) (optional)
 - [ProcessHeatLoad](@ref) (optional)
@@ -52,6 +57,10 @@ A Scenario struct can contain the following keys:
 - [GHP](@ref) (optional, can be Array)
 - [SteamTurbine](@ref) (optional)
 - [ElectricHeater](@ref) (optional)
+- [Electrolyzer](@ref) (optional)
+- [Compressor](@ref) (optional)
+- [FuelCell](@ref) (optional)
+- [HydrogenStorage](@ref) (optional)
 
 All values of `d` are expected to be `Dicts` except for `PV` and `GHP`, which can be either a `Dict` or `Dict[]` (for multiple PV arrays or GHP options).
 
@@ -74,7 +83,7 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
 
     # Check that only PV, electric storage, and generator are modeled for off-grid
     if settings.off_grid_flag
-        offgrid_allowed_keys = ["PV", "Wind", "ElectricStorage", "Generator", "Settings", "Site", "Financial", "ElectricLoad", "ElectricTariff", "ElectricUtility"]
+        offgrid_allowed_keys = ["PV", "Wind", "ElectricStorage", "Generator", "Settings", "Site", "Financial", "ElectricLoad", "ElectricTariff", "ElectricUtility","Electrolyzer","Compressor","FuelCell","HydrogenStorage"]
         unallowed_keys = setdiff(keys(d), offgrid_allowed_keys) 
         if !isempty(unallowed_keys)
             throw(@error("The following key(s) are not permitted when `off_grid_flag` is true: $unallowed_keys."))
@@ -118,31 +127,7 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
                                     off_grid_flag = settings.off_grid_flag
                                 )
 
-    if haskey(d, "ElectricUtility") && !(settings.off_grid_flag)
-        electric_utility = ElectricUtility(; dictkeys_tosymbols(d["ElectricUtility"])...,
-                                            latitude=site.latitude, longitude=site.longitude, 
-                                            CO2_emissions_reduction_min_fraction=site.CO2_emissions_reduction_min_fraction,
-                                            CO2_emissions_reduction_max_fraction=site.CO2_emissions_reduction_max_fraction,
-                                            min_resil_time_steps=site.min_resil_time_steps,
-                                            include_climate_in_objective=settings.include_climate_in_objective,
-                                            include_health_in_objective=settings.include_health_in_objective,
-                                            off_grid_flag=settings.off_grid_flag,
-                                            time_steps_per_hour=settings.time_steps_per_hour,
-                                            analysis_years=financial.analysis_years,
-                                            load_year=electric_load.year
-                                        )
-    elseif !(settings.off_grid_flag)
-        electric_utility = ElectricUtility(; latitude=site.latitude, longitude=site.longitude, 
-                                            CO2_emissions_reduction_min_fraction=site.CO2_emissions_reduction_min_fraction,
-                                            CO2_emissions_reduction_max_fraction=site.CO2_emissions_reduction_max_fraction,
-                                            include_climate_in_objective=settings.include_climate_in_objective,
-                                            include_health_in_objective=settings.include_health_in_objective,
-                                            off_grid_flag=settings.off_grid_flag,
-                                            time_steps_per_hour=settings.time_steps_per_hour,
-                                            analysis_years=financial.analysis_years,
-                                            load_year=electric_load.year
-                                        )
-    elseif settings.off_grid_flag 
+    if settings.off_grid_flag
         if haskey(d, "ElectricUtility")
             @warn "ElectricUtility inputs are not applicable when `off_grid_flag` is true and will be ignored. For off-grid scenarios, a year-long outage will always be modeled."
         end
@@ -156,6 +141,32 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
                                             emissions_factor_series_lb_SO2_per_kwh = 0,
                                             emissions_factor_series_lb_PM25_per_kwh = 0
                                         ) 
+    else
+        if haskey(d, "ElectricUtility")
+            electric_utility = ElectricUtility(; dictkeys_tosymbols(d["ElectricUtility"])...,
+                                            latitude=site.latitude, longitude=site.longitude, 
+                                            CO2_emissions_reduction_min_fraction=site.CO2_emissions_reduction_min_fraction,
+                                            CO2_emissions_reduction_max_fraction=site.CO2_emissions_reduction_max_fraction,
+                                            min_resil_time_steps=site.min_resil_time_steps,
+                                            include_climate_in_objective=settings.include_climate_in_objective,
+                                            include_health_in_objective=settings.include_health_in_objective,
+                                            off_grid_flag=settings.off_grid_flag,
+                                            time_steps_per_hour=settings.time_steps_per_hour,
+                                            analysis_years=financial.analysis_years,
+                                            load_year=electric_load.year
+                                        )
+        else
+            electric_utility = ElectricUtility(; latitude=site.latitude, longitude=site.longitude, 
+                                            CO2_emissions_reduction_min_fraction=site.CO2_emissions_reduction_min_fraction,
+                                            CO2_emissions_reduction_max_fraction=site.CO2_emissions_reduction_max_fraction,
+                                            include_climate_in_objective=settings.include_climate_in_objective,
+                                            include_health_in_objective=settings.include_health_in_objective,
+                                            off_grid_flag=settings.off_grid_flag,
+                                            time_steps_per_hour=settings.time_steps_per_hour,
+                                            analysis_years=financial.analysis_years,
+                                            load_year=electric_load.year
+                                        )
+        end
     end
         
     storage_structs = Dict{String, AbstractStorage}()
@@ -176,6 +187,11 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
         params = ColdThermalStorageDefaults(; dictkeys_tosymbols(d["ColdThermalStorage"])...)
         storage_structs["ColdThermalStorage"] = ColdThermalStorage(params, financial, settings.time_steps_per_hour)
     end
+    if haskey(d, "HydrogenStorage")
+        params = dictkeys_tosymbols(d["HydrogenStorage"])
+        storage_structs["HydrogenStorage"] = HydrogenStorage(params, financial)
+    end
+        
     storage = Storage(storage_structs)
 
     if !(settings.off_grid_flag) # ElectricTariff only required for on-grid                            
@@ -206,6 +222,60 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
         generator = Generator(; dictkeys_tosymbols(d["Generator"])..., off_grid_flag=settings.off_grid_flag, analysis_years=financial.analysis_years)
     else
         generator = Generator(; max_kw=0)
+    end
+
+    if haskey(d, "HydrogenLoad") 
+        hydrogen_load = HydrogenLoad(; dictkeys_tosymbols(d["HydrogenLoad"])..., 
+                                          time_steps_per_hour=settings.time_steps_per_hour
+                                        )
+    else
+        hydrogen_load = HydrogenLoad(; loads_kg=zeros(8760*settings.time_steps_per_hour),
+                                            time_steps_per_hour=settings.time_steps_per_hour
+                                        )
+    end
+
+    electrolyzer = nothing
+    compressor = nothing
+    fuel_cell = nothing
+
+    if (haskey(d, "Compressor") || haskey(d, "FuelCell") || haskey(d, "HydrogenStorage") || haskey(d, "HydrogenLoad")) && !haskey(d, "Electrolyzer")
+        throw(@error("Must include `Electrolyzer` if `Compressor`, `FuelCell`, `HydrogenStorage`, and/or `HydrogenLoad` is included"))
+    end
+
+    if haskey(d, "Electrolyzer")
+        electrolyzer = Electrolyzer(; dictkeys_tosymbols(d["Electrolyzer"])...)
+        if !electrolyzer.require_compression
+            compressor = Compressor(; installed_cost_per_kw = 0.0, 
+                                      om_cost_per_kw = 0.0,
+                                      om_cost_per_kwh = 0.0,
+                                      efficiency_kwh_per_kg = 0.0
+            )
+            @warn("`Compressor` will be ignored when `Electrolyzer` input `require_compression` is false.")
+        else
+            if haskey(d, "Compressor")
+                compressor = Compressor(; dictkeys_tosymbols(d["Compressor"])...)
+            else
+                compressor_inputs = Dict{Symbol, Any}()
+                compressor = Compressor(; compressor_inputs...)
+                @warn("`Compressor` inputs not provided when `Electrolyzer` input `require_compression` is true. `Compressor` default inputs will be included.")
+            end
+        end
+        
+        if !haskey(d, "HydrogenStorage")
+            hydrogen_storage_inputs = Dict{Symbol, Any}()
+            storage_structs["HydrogenStorage"] = HydrogenStorage()
+        end
+
+        if haskey(d, "FuelCell")
+            fuel_cell = FuelCell(; dictkeys_tosymbols(d["FuelCell"])...)
+        else
+            fuel_cell = FuelCell(; max_kw=0)
+        end
+
+        if !haskey(d, "FuelCell") && !haskey(d, "HydrogenLoad")
+            @warn "`FuelCell` and `HydrogenLoad` are not included to use the hydrogen stored."
+            #TODO Included hydrogen cost ($/kg) to allow pipeline/exports if FC/load not included
+        end
     end
 
     max_heat_demand_kw = 0.0
@@ -659,6 +729,7 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
         electric_utility, 
         financial,
         generator,
+        hydrogen_load,
         dhw_load,
         space_heating_load,
         process_heat_load,
@@ -673,7 +744,10 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
         space_heating_thermal_load_reduction_with_ghp_kw,
         cooling_thermal_load_reduction_with_ghp_kw,
         steam_turbine,
-        electric_heater
+        electric_heater,
+        electrolyzer,
+        compressor,
+        fuel_cell
     )
 end
 

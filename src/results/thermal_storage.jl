@@ -66,6 +66,7 @@ end
 """
 MPC `HotThermalStorage` results keys:
 - `soc_series_fraction` Vector of normalized (0-1) state of charge values over the time horizon [-]
+- `storage_to_load_series_mmbtu_per_hour` Vector of hot thermal storage dispatch to heating load
 """
 function add_hot_storage_results(m::JuMP.AbstractModel, p::MPCInputs, d::Dict, b::String; _n="")
     #=
@@ -77,6 +78,9 @@ function add_hot_storage_results(m::JuMP.AbstractModel, p::MPCInputs, d::Dict, b
     soc = (m[Symbol("dvStoredEnergy"*_n)][b, ts] for ts in p.time_steps)
     r["soc_series_fraction"] = round.(value.(soc) ./ p.s.storage.attr[b].size_kwh, digits=3)
 
+    discharge = (sum(m[Symbol("dvHeatFromStorage"*_n)][b,q,ts] for b in p.s.storage.types.hot, q in p.heating_loads) for ts in p.time_steps)
+    r["storage_to_load_series_mmbtu_per_hour"] = round.(value.(discharge) / KWH_PER_MMBTU, digits=7)
+    
     d[b] = r
     nothing
 end

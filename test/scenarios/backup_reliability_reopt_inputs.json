@@ -82,7 +82,11 @@
         "replace_cost_per_kwh": 230.0,
         "installed_cost_per_kw": 1000.0,
         "installed_cost_per_kwh": 500.0,
-        "total_itc_fraction": 0.0
+        "total_itc_fraction": 0.0,
+        "charge_efficiency": 0.947924047590312,
+        "discharge_efficiency": 0.947924047590312,
+        "soc_min_fraction": 1,
+        "soc_init_fraction": 1
     },
     "ElectricTariff": {
         "urdb_label": "5ed6c1a15457a3367add15ae"

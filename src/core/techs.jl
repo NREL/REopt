@@ -24,7 +24,10 @@ function Techs(p::REoptInputs, s::BAUScenario)
     absorption_chillers = String[]
     steam_turbines = String[]
     techs_can_supply_steam_turbine = String[]
-    electric_heaters = String[]
+    electric_heaters = String[]    
+    electrolyzer_techs = String[]
+    compressor_techs = String[] 
+    fuel_cell_techs = String[]
     techs_can_serve_space_heating = String[]
     techs_can_serve_dhw = String[]
     techs_can_serve_process_heat = String[]
@@ -65,6 +68,9 @@ function Techs(p::REoptInputs, s::BAUScenario)
         elec,
         pvtechs,
         gentechs,
+        electrolyzer_techs,
+        compressor_techs,
+        fuel_cell_techs,
         pbi_techs,
         techs_no_curtail,
         techs_no_turndown,
@@ -118,8 +124,11 @@ function Techs(s::Scenario)
     electric_chillers = String[]
     absorption_chillers = String[]
     steam_turbines = String[]
-    techs_can_supply_steam_turbine = String[]
+    techs_can_supply_steam_turbine = String[]    
     electric_heaters = String[]   
+    electrolyzer_techs = String[]
+    compressor_techs = String[] 
+    fuel_cell_techs = String[]
     techs_can_serve_space_heating = String[]
     techs_can_serve_dhw = String[] 
     techs_can_serve_process_heat = String[]
@@ -128,7 +137,7 @@ function Techs(s::Scenario)
     if s.wind.max_kw > 0
         push!(all_techs, "Wind")
         push!(elec, "Wind")
-        append!(techs_no_turndown, ["Wind"])
+        push!(techs_no_turndown, "Wind")
         if s.settings.off_grid_flag
             push!(requiring_oper_res, "Wind")
             push!(providing_oper_res, "Wind")
@@ -271,11 +280,33 @@ function Techs(s::Scenario)
     thermal_techs = union(heating_techs, boiler_techs, chp_techs, cooling_techs)
     fuel_burning_techs = union(gentechs, boiler_techs, chp_techs)
 
+    if !isnothing(s.electrolyzer)
+        push!(all_techs, "Electrolyzer")
+        push!(electrolyzer_techs, "Electrolyzer")
+    end
+
+    if !isnothing(s.compressor)
+        push!(all_techs, "Compressor")
+        push!(compressor_techs, "Compressor")
+    end
+    
+    if !isnothing(s.fuel_cell)
+        push!(all_techs, "FuelCell")
+        push!(elec, "FuelCell")
+        push!(fuel_cell_techs, "FuelCell")
+        if s.settings.off_grid_flag
+            push!(providing_oper_res, "FuelCell")
+        end
+    end
+
     Techs(
         all_techs,
         elec,
         pvtechs,
         gentechs,
+        electrolyzer_techs,
+        compressor_techs,
+        fuel_cell_techs,
         pbi_techs,
         techs_no_curtail,
         techs_no_turndown,
@@ -313,22 +344,74 @@ function Techs(s::MPCScenario)
     end
 
     all_techs = copy(pvtechs)
+    elec = copy(pvtechs)
     techs_no_turndown = copy(pvtechs)
     gentechs = String[]
     if s.generator.size_kw > 0
         push!(all_techs, "Generator")
+        push!(elec, "Generator")
         push!(gentechs, "Generator")
+    end
+
+    if s.wind.size_kw > 0
+        push!(all_techs, "Wind")
+        push!(elec, "Wind")
+        push!(techs_no_turndown, "Wind")
+    end
+
+    electrolyzer_techs = String[]
+    if !isnothing(s.electrolyzer) && s.electrolyzer.size_kw > 0
+        push!(all_techs, "Electrolyzer")
+        push!(electrolyzer_techs, "Electrolyzer")
+    end
+    
+    fuel_cell_techs = String[]
+    if !isnothing(s.fuel_cell) && s.fuel_cell.size_kw > 0
+        push!(all_techs, "FuelCell")
+        push!(elec, "FuelCell")
+        push!(fuel_cell_techs, "FuelCell")
+    end
+
+    compressor_techs = String[]
+    if !isnothing(s.compressor) && s.compressor.size_kw > 0
+        push!(all_techs, "Compressor")
+        push!(compressor_techs, "Compressor")
+    end
+
+    heating_techs = String[]
+    electric_heaters = String[]
+    techs_can_serve_space_heating = String[]
+    techs_can_serve_dhw = String[] 
+    techs_can_serve_process_heat = String[]
+    if !isnothing(s.electric_heater) && s.electric_heater.size_kw > 0
+        push!(all_techs, "ElectricHeater")
+        push!(heating_techs, "ElectricHeater")
+        push!(electric_heaters, "ElectricHeater")
+
+        if s.electric_heater.can_serve_space_heating
+            push!(techs_can_serve_space_heating, "ElectricHeater")
+        end
+        if s.electric_heater.can_serve_dhw
+            push!(techs_can_serve_dhw, "ElectricHeater")
+        end
+        if s.electric_heater.can_serve_process_heat
+            push!(techs_can_serve_process_heat, "ElectricHeater")
+        end
     end
 
     Techs(
         all_techs,
-        all_techs,
+        elec,
         pvtechs,
         gentechs,
+        electrolyzer_techs,
+        compressor_techs,
+        fuel_cell_techs,
         String[],
         String[],
         techs_no_turndown,
         String[],
+        heating_techs,
         String[],
         String[],
         String[],
@@ -340,11 +423,10 @@ function Techs(s::MPCScenario)
         String[],
         String[],
         String[],
-        String[],
-        String[],
-        String[],
-        String[],
-        String[],
+        electric_heaters,
+        techs_can_serve_space_heating,
+        techs_can_serve_dhw,
+        techs_can_serve_process_heat,
         String[]
     )
 end

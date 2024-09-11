@@ -10,6 +10,9 @@
 - `thermal_to_storage_series_mmbtu_per_hour`  # Thermal power production to TES (HotThermalStorage) series [MMBtu/hr]
 - `thermal_to_steamturbine_series_mmbtu_per_hour`  # Thermal power production to SteamTurbine series [MMBtu/hr]
 - `thermal_to_load_series_mmbtu_per_hour`  # Thermal power production to serve the heating load series [MMBtu/hr]
+- `thermal_to_dhw_load_series_mmbtu_per_hour`  # Thermal power production to serve the docmestic hot water heating load series [MMBtu/hr]
+- `thermal_to_space_heating_load_series_mmbtu_per_hour`  # Thermal power production to serve the space heating load series [MMBtu/hr]
+- `thermal_to_process_heat_load_series_mmbtu_per_hour`  # Thermal power production to serve the process heating load series [MMBtu/hr]
 
 !!! note "'Series' and 'Annual' energy outputs are average annual"
 	REopt performs load balances using average annual production values for technologies that include degradation. 
@@ -80,6 +83,85 @@ function add_electric_heater_results(m::JuMP.AbstractModel, p::REoptInputs, d::D
     if "ProcessHeat" in p.heating_loads && p.s.electric_heater.can_serve_process_heat
         @expression(m, ElectricHeaterToProcessHeatKW[ts in p.time_steps], 
             m[:dvHeatingProduction]["ElectricHeater","ProcessHeat",ts] - ElectricHeaterToHotTESByQualityKW["ProcessHeat",ts] - ElectricHeaterToSteamTurbineByQuality["ProcessHeat",ts]
+        )
+    else
+        @expression(m, ElectricHeaterToProcessHeatKW[ts in p.time_steps], 0.0)
+    end
+    r["thermal_to_process_heat_load_series_mmbtu_per_hour"] = round.(value.(ElectricHeaterToProcessHeatKW ./ KWH_PER_MMBTU), digits=5)
+
+    d["ElectricHeater"] = r
+	nothing
+end
+
+
+"""
+MPC `ElectricHeater` results keys:
+- `electric_consumption_series_kw`  # Fuel consumption series [kW]
+- `thermal_production_series_mmbtu_per_hour`  # Thermal energy production series [MMBtu/hr]
+- `thermal_to_storage_series_mmbtu_per_hour`  # Thermal power production to TES (HotThermalStorage) series [MMBtu/hr]
+- `thermal_to_load_series_mmbtu_per_hour`  # Thermal power production to serve the heating load series [MMBtu/hr]
+- `thermal_to_dhw_load_series_mmbtu_per_hour`  # Thermal power production to serve the docmestic hot water heating load series [MMBtu/hr]
+- `thermal_to_space_heating_load_series_mmbtu_per_hour`  # Thermal power production to serve the space heating load series [MMBtu/hr]
+- `thermal_to_process_heat_load_series_mmbtu_per_hour`  # Thermal power production to serve the process heating load series [MMBtu/hr]
+
+!!! note "'Series' and 'Annual' energy outputs are average annual"
+	REopt performs load balances using average annual production values for technologies that include degradation. 
+	Therefore, all timeseries (`_series`) and `annual_` results should be interpretted as energy outputs averaged over the analysis period. 
+
+"""
+
+function add_electric_heater_results(m::JuMP.AbstractModel, p::MPCInputs, d::Dict; _n="")
+    r = Dict{String, Any}()
+   
+    @expression(m, ElectricHeaterElectricConsumptionSeries[ts in p.time_steps],
+        p.hours_per_time_step * sum(m[:dvHeatingProduction][t,q,ts] / p.heating_cop[t] 
+        for q in p.heating_loads, t in p.techs.electric_heater))
+    r["electric_consumption_series_kw"] = round.(value.(ElectricHeaterElectricConsumptionSeries), digits=3)
+
+    @expression(m, ElectricHeaterThermalProductionSeries[ts in p.time_steps],
+        sum(m[:dvHeatingProduction][t,q,ts] for q in p.heating_loads, t in p.techs.electric_heater))
+	r["thermal_production_series_mmbtu_per_hour"] = 
+        round.(value.(ElectricHeaterThermalProductionSeries) / KWH_PER_MMBTU, digits=5)
+
+	if !isempty(p.s.storage.types.hot)
+        @expression(m, ElectricHeaterToHotTESKW[ts in p.time_steps],
+		    sum(m[:dvHeatToStorage][b,"ElectricHeater",q,ts] for b in p.s.storage.types.hot, q in p.heating_loads)
+            )
+            @expression(m, ElectricHeaterToHotTESByQualityKW[q in p.heating_loads, ts in p.time_steps], 
+            sum(m[:dvHeatToStorage][b,"ElectricHeater",q,ts] for b in p.s.storage.types.hot)
+            )
+    else
+        @expression(m, ElectricHeaterToHotTESKW[ts in p.time_steps], 0.0)
+        @expression(m, ElectricHeaterToHotTESByQualityKW[q in p.heating_loads, ts in p.time_steps], 0.0)
+    end
+	r["thermal_to_storage_series_mmbtu_per_hour"] = round.(value.(ElectricHeaterToHotTESKW) / KWH_PER_MMBTU, digits=3)
+
+	@expression(m, ElectricHeaterToLoad[ts in p.time_steps],
+		sum(m[:dvHeatingProduction]["ElectricHeater", q, ts] for q in p.heating_loads) - ElectricHeaterToHotTESKW[ts]
+    )
+	r["thermal_to_load_series_mmbtu_per_hour"] = round.(value.(ElectricHeaterToLoad) / KWH_PER_MMBTU, digits=3)
+
+    if "DomesticHotWater" in p.heating_loads && p.s.electric_heater.can_serve_dhw
+        @expression(m, ElectricHeaterToDHWKW[ts in p.time_steps], 
+            m[:dvHeatingProduction]["ElectricHeater","DomesticHotWater",ts] - ElectricHeaterToHotTESByQualityKW["DomesticHotWater",ts]
+        )
+    else
+        @expression(m, ElectricHeaterToDHWKW[ts in p.time_steps], 0.0)
+    end
+    r["thermal_to_dhw_load_series_mmbtu_per_hour"] = round.(value.(ElectricHeaterToDHWKW ./ KWH_PER_MMBTU), digits=5)
+    
+    if "SpaceHeating" in p.heating_loads && p.s.electric_heater.can_serve_space_heating
+        @expression(m, ElectricHeaterToSpaceHeatingKW[ts in p.time_steps], 
+            m[:dvHeatingProduction]["ElectricHeater","SpaceHeating",ts] - ElectricHeaterToHotTESByQualityKW["SpaceHeating",ts]
+        )
+    else
+        @expression(m, ElectricHeaterToSpaceHeatingKW[ts in p.time_steps], 0.0)
+    end
+    r["thermal_to_space_heating_load_series_mmbtu_per_hour"] = round.(value.(ElectricHeaterToSpaceHeatingKW ./ KWH_PER_MMBTU), digits=5)
+    
+    if "ProcessHeat" in p.heating_loads && p.s.electric_heater.can_serve_space_heating
+        @expression(m, ElectricHeaterToProcessHeatKW[ts in p.time_steps], 
+            m[:dvHeatingProduction]["ElectricHeater","ProcessHeat",ts] - ElectricHeaterToHotTESByQualityKW["ProcessHeat",ts]
         )
     else
         @expression(m, ElectricHeaterToProcessHeatKW[ts in p.time_steps], 0.0)

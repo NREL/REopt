@@ -26,6 +26,7 @@ struct BAUScenario <: AbstractScenario
     dhw_load::DomesticHotWaterLoad
     space_heating_load::SpaceHeatingLoad
     process_heat_load::ProcessHeatLoad
+    hydrogen_load::HydrogenLoad
     existing_boiler::Union{ExistingBoiler, Nothing}
     existing_chiller::Union{ExistingChiller, Nothing}
     outage_outputs::OutageOutputs
@@ -93,9 +94,8 @@ function BAUScenario(s::Scenario)
 
     # no existing GHP
     ghp_option_list = []
-    space_heating_thermal_load_reduction_with_ghp_kw = zeros(8760 * s.settings.time_steps_per_hour)
-    cooling_thermal_load_reduction_with_ghp_kw = zeros(8760 * s.settings.time_steps_per_hour)
-    
+    zero_load = zeros(8760 * s.settings.time_steps_per_hour)
+
     t0, tf = s.electric_utility.outage_start_time_step, s.electric_utility.outage_end_time_step
     #=
     When a deterministic grid outage is modeled we must adjust the BAU critical load profile to keep the problem 
@@ -111,6 +111,10 @@ function BAUScenario(s::Scenario)
     if tf > t0 && t0 > 0
         elec_load.critical_loads_kw[t0:tf] = zeros(tf-t0+1)  # set crit load to zero 
     end
+
+    hydrogen_load = deepcopy(s.hydrogen_load)
+    hydrogen_load.loads_kg = zeros(8760 * s.settings.time_steps_per_hour)
+
     outage_outputs = OutageOutputs()
 
     flexible_hvac = nothing
@@ -138,13 +142,14 @@ function BAUScenario(s::Scenario)
         s.dhw_load,
         s.space_heating_load,
         s.process_heat_load,
+        hydrogen_load,
         s.existing_boiler,
         s.existing_chiller,
         outage_outputs,
         flexible_hvac,
         s.cooling_load,
         ghp_option_list,
-        space_heating_thermal_load_reduction_with_ghp_kw,
-        cooling_thermal_load_reduction_with_ghp_kw
+        zero_load,
+        zero_load
     )
 end

@@ -17,6 +17,10 @@ export
     run_mpc,
     build_mpc!, 
     backup_reliability,
+    shift_gen_storage_prob_matrix!,
+    backup_reliability_reopt_inputs,
+    get_maximum_generation,
+    storage_leakage!,
     get_chp_defaults_prime_mover_size_class,
     get_steam_turbine_defaults_size_class,
     simulated_load,
@@ -118,9 +122,14 @@ include("core/wind.jl")
 include("core/energy_storage/storage.jl")
 include("core/energy_storage/electric_storage.jl")
 include("core/energy_storage/thermal_storage.jl")
+include("core/energy_storage/hydrogen_storage.jl")
+include("core/electrolyzer.jl")
+include("core/compressor.jl")
+include("core/fuel_cell.jl")
 include("core/generator.jl")
 include("core/doe_commercial_reference_building_loads.jl")
 include("core/electric_load.jl")
+include("core/hydrogen_load.jl")
 include("core/existing_boiler.jl")
 include("core/boiler.jl")
 include("core/existing_chiller.jl")
@@ -159,6 +168,7 @@ include("constraints/ghp_constraints.jl")
 include("constraints/steam_turbine_constraints.jl")
 include("constraints/renewable_energy_constraints.jl")
 include("constraints/emissions_constraints.jl")
+include("constraints/hydrogen_constraints.jl")
 
 include("mpc/structs.jl")
 include("mpc/scenario.jl")
@@ -189,6 +199,11 @@ include("results/ghp.jl")
 include("results/steam_turbine.jl")
 include("results/electric_heater.jl")
 include("results/heating_cooling_load.jl")
+include("results/hydrogen_load.jl")
+include("results/hydrogen_storage.jl")
+include("results/electrolyzer.jl")
+include("results/compressor.jl")
+include("results/fuel_cell.jl")
 
 include("core/reopt.jl")
 include("core/reopt_multinode.jl")

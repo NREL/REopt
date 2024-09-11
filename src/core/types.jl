@@ -9,9 +9,13 @@ abstract type AbstractThermalTech <: AbstractGenerator end
 abstract type AbstractCHP <: AbstractFuelBurningTech end
 abstract type AbstractThermalStorage <: AbstractStorage end
 abstract type AbstractElectricStorage <: AbstractStorage end
+abstract type AbstractHydrogenStorage <: AbstractStorage end
 abstract type AbstractThermalStorageDefaults end
 abstract type AbstractGHP <: AbstractTech end
 abstract type AbstractSteamTurbine <: AbstractTech end
+abstract type AbstractElectrolyzer <: AbstractTech end
+abstract type AbstractCompressor <: AbstractTech end
+abstract type AbstractFuelCell <: AbstractTech end
 
 
 """
@@ -25,6 +29,9 @@ mutable struct Techs
     elec::Vector{String}
     pv::Vector{String}
     gen::Vector{String}
+    electrolyzer::Vector{String}
+    compressor::Vector{String}
+    fuel_cell::Vector{String}
     pbi::Vector{String}
     no_curtail::Vector{String}
     no_turndown::Vector{String}
@@ -41,11 +48,11 @@ mutable struct Techs
     absorption_chiller::Vector{String}
     steam_turbine::Vector{String}
     can_supply_steam_turbine::Vector{String}
-    electric_heater::Vector{String}    
+    electric_heater::Vector{String}
     can_serve_dhw::Vector{String}
     can_serve_space_heating::Vector{String}
     can_serve_process_heat::Vector{String}
-    ghp_techs::Vector{String}
+    ghp::Vector{String}
 end
 ```
 """
@@ -54,6 +61,9 @@ mutable struct Techs
     elec::Vector{String}
     pv::Vector{String}
     gen::Vector{String}
+    electrolyzer::Vector{String}
+    compressor::Vector{String}
+    fuel_cell::Vector{String}
     pbi::Vector{String}
     no_curtail::Vector{String}
     no_turndown::Vector{String}

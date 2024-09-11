@@ -16,6 +16,8 @@ mutable struct StorageTypes
     thermal::Vector{String}
     hot::Vector{String}
     cold::Vector{String}
+    hydrogen::Vector{String}
+    nonhydrogen::Vector{String}
 end
 ```
 """
@@ -25,10 +27,13 @@ mutable struct StorageTypes
     thermal::Vector{String}
     hot::Vector{String}
     cold::Vector{String}
-
+    hydrogen::Vector{String}
+    nonhydrogen::Vector{String}
 
     function StorageTypes()
         new(
+            String[],
+            String[],
             String[],
             String[],
             String[],
@@ -42,21 +47,36 @@ mutable struct StorageTypes
         elec_storage = String[]
         hot_storage = String[]
         cold_storage = String[]
-
+        hydrogen_storage = String[]
+        non_hydrogen_storage = String[]
+        
         for (k,v) in d
-            if v.max_kw > 0.0 && v.max_kwh > 0.0
 
-                push!(all_storage, k)
+            if typeof(v) <: AbstractHydrogenStorage
 
-                if typeof(v) <: AbstractElectricStorage
-                    push!(elec_storage, k)
+                if v.max_kg > 0.0
 
-                elseif typeof(v) <: HotThermalStorage
-                    push!(hot_storage, k)
-                elseif typeof(v) <: ColdThermalStorage
-                    push!(cold_storage, k)
-                else
-                    throw(@error("Storage not labeled as Hot or Cold, or Electric."))
+                    push!(all_storage, k)
+                    push!(hydrogen_storage, k)
+
+                end
+            else
+                if v.max_kw > 0.0 && v.max_kwh > 0.0
+
+                    push!(all_storage, k)
+                    push!(non_hydrogen_storage, k)
+
+                    if typeof(v) <: AbstractElectricStorage
+                        push!(elec_storage, k)
+                    elseif typeof(v) <: HotThermalStorage
+                        push!(hot_storage, k)
+                    elseif typeof(v) <: MPCHighTempThermalStorage
+                        push!(hot_storage, k)
+                    elseif typeof(v) <: ColdThermalStorage
+                        push!(cold_storage, k)
+                    else
+                        throw(@error("Storage not labeled as Hot or Cold, or Electric."))
+                    end
                 end
             end
         end
@@ -68,7 +88,9 @@ mutable struct StorageTypes
             elec_storage,
             thermal_storage,
             hot_storage,
-            cold_storage
+            cold_storage,
+            hydrogen_storage,
+            non_hydrogen_storage
         )
     end
 end
