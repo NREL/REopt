@@ -656,6 +656,67 @@ else  # run HiGHS tests
             end
         end
 
+        @testset "Electric Storage O&M" begin
+            model = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+            data = JSON.parsefile("./scenarios/storage_om.json")
+
+            data["ElectricStorage"]["om_cost_per_kw"] = 10
+            data["ElectricStorage"]["om_cost_per_kwh"] = 0
+
+            s = Scenario(data)
+            inputs = REoptInputs(s)
+            results = run_reopt(model, inputs)
+
+            @test results["ElectricStorage"]["year_one_om_cost_before_tax"] ≈ 400 atol=0.01
+            @test results["ElectricStorage"]["lifecycle_om_cost_after_tax"] ≈ 6272 atol=0.01 
+
+            data["ElectricStorage"]["om_cost_per_kw"] = 0
+            data["ElectricStorage"]["om_cost_per_kwh"] = 5
+
+            model = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+            s = Scenario(data)
+            inputs = REoptInputs(s)
+            results = run_reopt(model, inputs)
+
+            @test results["ElectricStorage"]["year_one_om_cost_before_tax"] ≈ 400 atol=0.01
+            @test results["ElectricStorage"]["lifecycle_om_cost_after_tax"] ≈ 6272 atol=0.01 
+        end
+
+        @testset "Electric Storage Self-Discharge" begin
+            model = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+            data = JSON.parsefile("./scenarios/storage_om.json")
+
+            data["ElectricStorage"]["soc_init_fraction"] = 1.0
+            data["ElectricStorage"]["soc_min_fraction"] = 0.0
+            data["ElectricStorage"]["soc_based_per_ts_self_discharge_fraction"] = 0.0025/24
+
+            s = Scenario(data)
+            inputs = REoptInputs(s)
+            results_soc_based_self_discharge = run_reopt(model, inputs)
+
+            model = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+            data["ElectricStorage"]["soc_based_per_ts_self_discharge_fraction"] = 0.0
+
+            s = Scenario(data)
+            inputs = REoptInputs(s)
+            results_no_self_discharge = run_reopt(model, inputs)
+
+            model = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+            data["ElectricStorage"]["capacity_based_per_ts_self_discharge_fraction"] = 0.0025/24
+
+            s = Scenario(data)
+            inputs = REoptInputs(s)
+            results_capacity_based_self_discharge = run_reopt(model, inputs)
+
+            @test results_soc_based_self_discharge["ElectricStorage"]["year_one_om_cost_before_tax"] ≈ 0 atol=0.01
+            @test results_soc_based_self_discharge["ElectricStorage"]["lifecycle_om_cost_after_tax"] ≈ 0 atol=0.01 
+            @test sum(results_no_self_discharge["ElectricStorage"]["storage_to_load_series_kw"]) - 
+                sum(results_soc_based_self_discharge["ElectricStorage"]["storage_to_load_series_kw"]) ≈ 15.382 atol=0.01 
+
+            calculated_output = round((80 - (80 * 0.0025/24 * 8760)) * sqrt(0.975) * 0.96, digits = 3)
+            @test sum(results_capacity_based_self_discharge["ElectricStorage"]["storage_to_load_series_kw"]) ≈ calculated_output atol=0.01 
+        end
+        
         @testset "Heating loads and addressable load fraction" begin
             # Default LargeOffice CRB with SpaceHeatingLoad and DomesticHotWaterLoad are served by ExistingBoiler
             m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))

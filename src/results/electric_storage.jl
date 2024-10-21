@@ -34,6 +34,12 @@ function add_electric_storage_results(m::JuMP.AbstractModel, p::REoptInputs, d::
         r["initial_capital_cost"] = r["size_kwh"] * p.s.storage.attr[b].installed_cost_per_kwh +
             r["size_kw"] * p.s.storage.attr[b].installed_cost_per_kw
 
+        StoragePerUnitOMCosts = p.third_party_factor * p.pwf_om * (p.s.storage.attr[b].om_cost_per_kw * m[Symbol("dvStoragePower"*_n)][b] +
+                                                                 p.s.storage.attr[b].om_cost_per_kwh * m[Symbol("dvStorageEnergy"*_n)][b])
+
+        r["lifecycle_om_cost_after_tax"] = round(value(StoragePerUnitOMCosts) * (1 - p.s.financial.owner_tax_rate_fraction), digits=0)
+        r["year_one_om_cost_before_tax"] = round(value(StoragePerUnitOMCosts) / (p.pwf_om * p.third_party_factor), digits=0)
+            
         if p.s.storage.attr[b].model_degradation
             r["state_of_health"] = value.(m[:SOH]).data / value.(m[:dvStorageEnergy])["ElectricStorage"];
             r["maintenance_cost"] = value(m[:degr_cost])

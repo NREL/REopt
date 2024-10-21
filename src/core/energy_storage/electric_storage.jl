@@ -171,6 +171,8 @@ end
     installed_cost_per_kwh::Real = 455.0
     replace_cost_per_kw::Real = 715.0
     replace_cost_per_kwh::Real = 318.0
+    om_cost_per_kw::Real = 0.0 # Capacity-based O&M costs in \$/kW-rated/year. When including battery replacement costs, the user should ensure that O&M costs do not account for augmentation/replacement.
+    om_cost_per_kwh::Real = 0.0 # Capacity-based O&M costs in \$/kWh-rated/year. When including battery replacement costs, the user should ensure that O&M costs do not account for augmentation/replacement.
     inverter_replacement_year::Int = 10
     battery_replacement_year::Int = 10
     macrs_option_years::Int = 7
@@ -185,7 +187,9 @@ end
     model_degradation::Bool = false
     degradation::Dict = Dict()
     minimum_avg_soc_fraction::Float64 = 0.0
-```
+    capacity_based_per_ts_self_discharge_fraction::Float64 = 0.0 # Battery self-discharge as a fraction per timestep loss based on the rated kWh capacity of the sized storage system. 
+    soc_based_per_ts_self_discharge_fraction::Float64 = 0.0 # Battery self-discharge as a fraction per timestep loss based on kWh stored in each timestep
+``` 
 """
 Base.@kwdef struct ElectricStorageDefaults
     off_grid_flag::Bool = false
@@ -204,6 +208,8 @@ Base.@kwdef struct ElectricStorageDefaults
     installed_cost_per_kwh::Real = 455.0
     replace_cost_per_kw::Real = 715.0
     replace_cost_per_kwh::Real = 318.0
+    om_cost_per_kw::Real = 0.0
+    om_cost_per_kwh::Real = 0.0
     inverter_replacement_year::Int = 10
     battery_replacement_year::Int = 10
     macrs_option_years::Int = 7
@@ -218,6 +224,8 @@ Base.@kwdef struct ElectricStorageDefaults
     model_degradation::Bool = false
     degradation::Dict = Dict()
     minimum_avg_soc_fraction::Float64 = 0.0
+    capacity_based_per_ts_self_discharge_fraction::Float64 = 0.0
+    soc_based_per_ts_self_discharge_fraction::Float64 = 0.0
 end
 
 
@@ -243,6 +251,8 @@ struct ElectricStorage <: AbstractElectricStorage
     installed_cost_per_kwh::Real
     replace_cost_per_kw::Real
     replace_cost_per_kwh::Real
+    om_cost_per_kw::Real
+    om_cost_per_kwh::Real
     inverter_replacement_year::Int
     battery_replacement_year::Int
     macrs_option_years::Int
@@ -259,6 +269,8 @@ struct ElectricStorage <: AbstractElectricStorage
     model_degradation::Bool
     degradation::Degradation
     minimum_avg_soc_fraction::Float64
+    capacity_based_per_ts_self_discharge_fraction::Float64
+    soc_based_per_ts_self_discharge_fraction::Float64
 
     function ElectricStorage(d::Dict, f::Financial)  
         s = ElectricStorageDefaults(;d...)
@@ -330,6 +342,8 @@ struct ElectricStorage <: AbstractElectricStorage
             s.installed_cost_per_kwh,
             replace_cost_per_kw,
             replace_cost_per_kwh,
+            s.om_cost_per_kw,
+            s.om_cost_per_kwh,
             s.inverter_replacement_year,
             s.battery_replacement_year,
             s.macrs_option_years,
@@ -345,7 +359,9 @@ struct ElectricStorage <: AbstractElectricStorage
             net_present_cost_per_kwh,
             s.model_degradation,
             degr,
-            s.minimum_avg_soc_fraction
+            s.minimum_avg_soc_fraction,
+            s.capacity_based_per_ts_self_discharge_fraction,
+            s.soc_based_per_ts_self_discharge_fraction
         )
     end
 end
