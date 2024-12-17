@@ -155,7 +155,7 @@ function add_electrothermal_storage_dispatch_constraints(m, p, b; _n="")
 	)
 
     # Require battery to be a certain duration battery
-    #@constraint(m, m[Symbol("dvStoragePower"*_n)][b] == m[Symbol("dvStorageEnergy"*_n)][b] / 100)
+    @constraint(m, m[Symbol("dvStoragePower"*_n)][b] == m[Symbol("dvStorageEnergy"*_n)][b] / 48)
 
 
 
