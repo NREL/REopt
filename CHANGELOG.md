@@ -26,6 +26,10 @@ Classify the change according to the following categories:
     ### Removed
 
 
+## fix-nonhourly-fuel-cost
+### Fixed
+- Modified the fuel cost calculation to correctly account for the time step duration when using non-hourly data.
+
 ## nem-export
 ### Fixed
 - Constrained export to grid in the NEM bin (`dvProductionToGrid"*_n)][t, :NEM, ts`) to be 0 when system is sized over NEM limit (i.e., when binNEM =0)

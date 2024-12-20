@@ -29,7 +29,8 @@
         "electric_efficiency_full_load": 0.3232898,
         "electric_efficiency_half_load": 0.3232898,
         "om_cost_per_kw": 20.0,
-        "fuel_cost_per_gallon": 3.0
+        "fuel_cost_per_gallon": 3.0,
+        "min_turn_down_fraction": 0.05
     },
     "ElectricLoad": {
         "doe_reference_name": "RetailStore",

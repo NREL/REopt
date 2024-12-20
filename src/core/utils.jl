@@ -290,7 +290,7 @@ end
 Convert a per hour value (eg. dollars/kWh) to time series that matches the settings.time_steps_per_hour
 """
 function per_hour_value_to_time_series(x::T, time_steps_per_hour::Int, name::String) where T <: Real
-    repeat([x / time_steps_per_hour], 8760 * time_steps_per_hour)
+    repeat([x], 8760 * time_steps_per_hour)
 end
 
 
