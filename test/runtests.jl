@@ -2718,6 +2718,42 @@ else  # run HiGHS tests
                 @test results["ASHPSpaceHeater"]["annual_thermal_production_tonhour"] ≈ 876.0 rtol=1e-4
                 @test results["ExistingBoiler"]["annual_thermal_production_mmbtu"] ≈ 0.4 * 8760 rtol=1e-4
             end
+
+            @testset "ASHP min load served" begin
+                d = JSON.parsefile("./scenarios/ashp.json")
+                d["SpaceHeatingLoad"]["annual_mmbtu"] = 0.5 * 8760
+                d["DomesticHotWaterLoad"] = Dict{String,Any}("annual_mmbtu" => 0.5 * 8760, "doe_reference_name" => "FlatLoad")
+                d["CoolingLoad"] = Dict{String,Any}("thermal_loads_ton" => ones(8760)*0.1)
+                d["ExistingChiller"] = Dict{String,Any}("retire_in_optimal" => false, "cop" => 100)
+                d["ExistingBoiler"]["retire_in_optimal"] = false
+                d["ExistingBoiler"]["fuel_cost_per_mmbtu"] = 0.001
+                d["ASHPSpaceHeater"]["can_serve_cooling"] = true
+                d["ASHPSpaceHeater"]["force_into_system"] = false
+                d["ASHPSpaceHeater"]["min_allowable_load_service_fraction"] = 0.5
+                d["ASHPWaterHeater"] = Dict{String,Any}("force_into_system" => false, "min_allowable_load_service_fraction" => 0.5, "max_ton" => 100000)
+                
+                s = Scenario(d)
+                p = REoptInputs(s)
+                m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+                results = run_reopt(m, p)
+            
+                #min_allowable_load_fraction should allow zero-kW system, yield no output
+                @test results["ASHPWaterHeater"]["annual_electric_consumption_kwh"] ≈ 0.0 atol=1e-4
+                @test results["ASHPSpaceHeater"]["annual_thermal_production_mmbtu"] ≈ 0.0 atol=1e-4
+                @test results["ASHPSpaceHeater"]["annual_thermal_production_tonhour"] ≈ 0.0 atol=1e-4
+        
+                #force system to be purchased, which enforces min allowable load fraction to force dispatch
+                d["ASHPSpaceHeater"]["min_ton"] = 10
+                d["ASHPWaterHeater"]["min_ton"] = 10 
+                s = Scenario(d)
+                p = REoptInputs(s)
+                m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+                results = run_reopt(m, p)
+            
+                @test results["ASHPWaterHeater"]["annual_electric_consumption_kwh"] ≈ sum(0.2 * REopt.KWH_PER_MMBTU / p.heating_cop["ASHPWaterHeater"][ts] for ts in p.time_steps) rtol=1e-4
+                @test results["ASHPSpaceHeater"]["annual_thermal_production_mmbtu"] ≈ 0.2 * 8760 rtol=1e-4
+                @test results["ASHPSpaceHeater"]["annual_thermal_production_tonhour"] ≈ 438.0 rtol=1e-4
+            end
         
         end
 

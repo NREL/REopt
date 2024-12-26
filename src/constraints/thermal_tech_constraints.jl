@@ -107,29 +107,47 @@ end
     
 
 function add_ashp_force_in_constraints(m, p; _n="")
-    if "ASHPSpaceHeater" in p.techs.ashp && p.s.ashp.force_into_system
-        for t in setdiff(p.techs.can_serve_space_heating, ["ASHPSpaceHeater"])
-            for ts in p.time_steps
-                fix(m[Symbol("dvHeatingProduction"*_n)][t,"SpaceHeating",ts], 0.0, force=true)
-                fix(m[Symbol("dvProductionToWaste"*_n)][t,"SpaceHeating",ts], 0.0, force=true)
+    if "ASHPSpaceHeater" in p.techs.ashp 
+        if p.s.ashp.force_into_system
+            for t in setdiff(p.techs.can_serve_space_heating, ["ASHPSpaceHeater"])
+                for ts in p.time_steps
+                    fix(m[Symbol("dvHeatingProduction"*_n)][t,"SpaceHeating",ts], 0.0, force=true)
+                    fix(m[Symbol("dvProductionToWaste"*_n)][t,"SpaceHeating",ts], 0.0, force=true)
+                end
             end
+        elseif p.s.ashp.min_allowable_load_service_fraction > 0.0
+            @constraint(m, [ts in p.time_steps],
+                m[Symbol("dvHeatingProduction"*_n)]["ASHPSpaceHeater","SpaceHeating",ts] >= p.s.ashp.min_allowable_load_service_fraction * p.heating_loads_kw["SpaceHeating"][ts] * m[Symbol("binSegmentASHPSpaceHeater")][1]
+            )
         end
     end
 
-    if "ASHPSpaceHeater" in p.techs.cooling && p.s.ashp.force_into_system
-        for t in setdiff(p.techs.cooling, ["ASHPSpaceHeater"])
-            for ts in p.time_steps
-                fix(m[Symbol("dvCoolingProduction"*_n)][t,ts], 0.0, force=true)
+    if "ASHPSpaceHeater" in p.techs.cooling 
+        if p.s.ashp.force_into_system
+            for t in setdiff(p.techs.cooling, ["ASHPSpaceHeater"])
+                for ts in p.time_steps
+                    fix(m[Symbol("dvCoolingProduction"*_n)][t,ts], 0.0, force=true)
+                end
             end
-        end
+        elseif p.s.ashp.min_allowable_load_service_fraction > 0.0
+            @constraint(m, [ts in p.time_steps],
+                m[Symbol("dvCoolingProduction"*_n)]["ASHPSpaceHeater",ts] >= p.s.ashp.min_allowable_load_service_fraction * p.s.cooling_load.loads_kw_thermal[ts] * m[Symbol("binSegmentASHPSpaceHeater")][1]
+            )
+        end 
     end
 
-    if "ASHPWaterHeater" in p.techs.ashp && p.s.ashp_wh.force_into_system
-        for t in setdiff(p.techs.can_serve_dhw, ["ASHPWaterHeater"])
-            for ts in p.time_steps
-                fix(m[Symbol("dvHeatingProduction"*_n)][t,"DomesticHotWater",ts], 0.0, force=true)
-                fix(m[Symbol("dvProductionToWaste"*_n)][t,"DomesticHotWater",ts], 0.0, force=true)
+    if "ASHPWaterHeater" in p.techs.ashp 
+        if p.s.ashp_wh.force_into_system
+            for t in setdiff(p.techs.can_serve_dhw, ["ASHPWaterHeater"])
+                for ts in p.time_steps
+                    fix(m[Symbol("dvHeatingProduction"*_n)][t,"DomesticHotWater",ts], 0.0, force=true)
+                    fix(m[Symbol("dvProductionToWaste"*_n)][t,"DomesticHotWater",ts], 0.0, force=true)
+                end
             end
+        elseif p.s.ashp_wh.min_allowable_load_service_fraction > 0.0
+            @constraint(m, [ts in p.time_steps],
+                m[Symbol("dvHeatingProduction"*_n)]["ASHPWaterHeater","DomesticHotWater",ts] >= p.s.ashp_wh.min_allowable_load_service_fraction * p.heating_loads_kw["DomesticHotWater"][ts] * m[Symbol("binSegmentASHPWaterHeater")][1]
+            )
         end
     end
 end

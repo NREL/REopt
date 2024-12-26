@@ -25,7 +25,10 @@ Classify the change according to the following categories:
     ### Deprecated
     ### Removed
 
-
+## Develop min-load-to-ashp
+### Added
+- Added new attribute `` to **ASHPSpaceHeater** and **ASHPWaterHeater** technologies.  When this is populated, this imposes a constraint on the minimum fraction of load served by the ASHP system in every period, if the system is purchased.
+ 
 ## Develop
 ### Fixed
 - Constrained export to grid in the NEM bin (`dvProductionToGrid"*_n)][t, :NEM, ts`) to be 0 when system is sized over NEM limit (i.e., when binNEM =0)

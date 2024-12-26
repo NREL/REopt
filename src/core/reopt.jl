@@ -324,10 +324,6 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
             add_heating_cooling_constraints(m, p)
         end
 
-		if !isempty(p.techs.ashp)
-			add_ashp_force_in_constraints(m, p)
-		end
-
 		if !isempty(p.avoided_capex_by_ashp_present_value) && !isempty(p.techs.ashp)
 			avoided_capex_by_ashp(m, p)
 		end
@@ -404,6 +400,10 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
             )
         end
     end
+
+	if !isempty(p.techs.ashp)
+		add_ashp_force_in_constraints(m, p)
+	end
 	
 	@expression(m, TotalStorageCapCosts, p.third_party_factor * (
 		sum( p.s.storage.attr[b].net_present_cost_per_kw * m[:dvStoragePower][b] for b in p.s.storage.types.elec) + 

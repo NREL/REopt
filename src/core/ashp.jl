@@ -12,6 +12,7 @@ ASHPSpaceHeater has the following attributes:
     min_kw::Real # Minimum thermal power size
     max_kw::Real # Maximum thermal power size
     min_allowable_kw::Real # Minimum nonzero thermal power size if included
+    min_allowable_load_service_fraction::Real # Minimum load service required by ASHP system
     sizing_factor::Real # Size multiplier of system, relative that of the max load given by dispatch profile
     installed_cost_per_kw::Real # Thermal power-based cost
     om_cost_per_kw::Real # Thermal power-based fixed O&M cost
@@ -33,6 +34,7 @@ struct ASHP <: AbstractThermalTech
     min_kw::Real
     max_kw::Real
     min_allowable_kw::Real
+    min_allowable_load_service_fraction::Real
     sizing_factor::Real
     installed_cost_per_kw::Real
     om_cost_per_kw::Real
@@ -106,6 +108,7 @@ function ASHPSpaceHeater(;
         max_ton::Real = BIG_NUMBER,
         min_allowable_ton::Union{Real, Nothing} = nothing,
         min_allowable_peak_capacity_fraction::Union{Real, Nothing} = nothing, 
+        min_allowable_load_service_fraction::Union{Real, Nothing} = nothing,
         sizing_factor::Union{Real, Nothing} = nothing, 
         installed_cost_per_ton::Union{Real, Nothing} = nothing,
         om_cost_per_ton::Union{Real, Nothing} = nothing,
@@ -206,16 +209,22 @@ function ASHPSpaceHeater(;
         cooling_cf = Float64[]
     end
 
-    if !isnothing(min_allowable_ton) && !isnothing(min_allowable_peak_capacity_fraction)
-        throw(@error("at most one of min_allowable_ton and min_allowable_peak_capacity_fraction may be input."))
+    if !isnothing(min_allowable_ton) + !isnothing(min_allowable_peak_capacity_fraction) + !isnothing(min_allowable_load_service_fraction) > 1
+        throw(@error("at most one of min_allowable_ton, min_allowable_peak_capacity_fraction and min_allowable_load_service_fraction may be input."))
     elseif !isnothing(min_allowable_ton)
         min_allowable_kw = min_allowable_ton * KWH_THERMAL_PER_TONHOUR
+        min_allowable_load_service_fraction = 0.0
         @warn("user-provided minimum allowable ton is used in the place of the default; this may provided very small sizes if set to zero.")
     else
-        if isnothing(min_allowable_peak_capacity_fraction)
+        if !isnothing(min_allowable_peak_capacity_fraction) 
+            min_allowable_load_service_fraction = 0.0
+        elseif !isnothing(min_allowable_load_service_fraction)
+            min_allowable_peak_capacity_fraction = min_allowable_load_service_fraction
+        else
             min_allowable_peak_capacity_fraction = 0.5
+            min_allowable_load_service_fraction = 0.0
         end
-        min_allowable_kw = get_ashp_default_min_allowable_size(heating_load, heating_cf, cooling_load, cooling_cf, min_allowable_peak_capacity_fraction)
+        min_allowable_kw = get_ashp_default_min_allowable_size(heating_load, heating_cf, Real[], Real[], min_allowable_peak_capacity_fraction)
     end
 
     if min_allowable_kw > max_kw
@@ -229,6 +238,7 @@ function ASHPSpaceHeater(;
         min_kw,
         max_kw,
         min_allowable_kw,
+        min_allowable_load_service_fraction,
         sizing_factor,
         installed_cost_per_kw,
         om_cost_per_kw,
@@ -296,6 +306,7 @@ function ASHPWaterHeater(;
     max_ton::Real = BIG_NUMBER,
     min_allowable_ton::Union{Real, Nothing} = nothing,
     min_allowable_peak_capacity_fraction::Union{Real, Nothing} = nothing, 
+    min_allowable_load_service_fraction::Union{Real, Nothing} = nothing,
     sizing_factor::Union{Real, Nothing} = nothing, 
     installed_cost_per_ton::Union{Real, Nothing} = nothing,
     om_cost_per_ton::Union{Real, Nothing} = nothing,
@@ -363,14 +374,20 @@ function ASHPWaterHeater(;
     
     heating_cf[heating_cop .== 1] .= 1
 
-    if !isnothing(min_allowable_ton) && !isnothing(min_allowable_peak_capacity_fraction)
-        throw(@error("at most one of min_allowable_ton and min_allowable_peak_capacity_fraction may be input."))
+    if !isnothing(min_allowable_ton) + !isnothing(min_allowable_peak_capacity_fraction) + !isnothing(min_allowable_load_service_fraction) > 1
+        throw(@error("at most one of min_allowable_ton, min_allowable_peak_capacity_fraction and min_allowable_load_service_fraction may be input."))
     elseif !isnothing(min_allowable_ton)
         min_allowable_kw = min_allowable_ton * KWH_THERMAL_PER_TONHOUR
+        min_allowable_load_service_fraction = 0.0
         @warn("user-provided minimum allowable ton is used in the place of the default; this may provided very small sizes if set to zero.")
     else
-        if isnothing(min_allowable_peak_capacity_fraction)
+        if !isnothing(min_allowable_peak_capacity_fraction) 
+            min_allowable_load_service_fraction = 0.0
+        elseif !isnothing(min_allowable_load_service_fraction)
+            min_allowable_peak_capacity_fraction = min_allowable_load_service_fraction
+        else
             min_allowable_peak_capacity_fraction = 0.5
+            min_allowable_load_service_fraction = 0.0
         end
         min_allowable_kw = get_ashp_default_min_allowable_size(heating_load, heating_cf, Real[], Real[], min_allowable_peak_capacity_fraction)
     end
@@ -383,6 +400,7 @@ function ASHPWaterHeater(;
         min_kw,
         max_kw,
         min_allowable_kw,
+        min_allowable_load_service_fraction,
         sizing_factor,
         installed_cost_per_kw,
         om_cost_per_kw,
