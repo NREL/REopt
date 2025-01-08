@@ -14,6 +14,7 @@ function add_variables!(m::JuMP.AbstractModel, ps::AbstractVector{REoptInputs{T}
 	dvs_idx_on_storagetypes = String[
 		"dvStoragePower",
 		"dvStorageEnergy",
+		"binIncludeStorageCostConstant"
 	]
 	dvs_idx_on_storagetypes_time_steps = String[
 		"dvDischargeFromStorage"
@@ -75,6 +76,7 @@ function add_variables!(m::JuMP.AbstractModel, ps::AbstractVector{REoptInputs{T}
 		m[Symbol(ex_name)] = @expression(m, p.third_party_factor * 
 			sum(p.s.storage.attr[b].net_present_cost_per_kw * m[Symbol("dvStoragePower"*_n)][b] for b in p.s.storage.types.elec)
 			+ sum(p.s.storage.attr[b].net_present_cost_per_kwh * m[Symbol("dvStorageEnergy"*_n)][b] for b in p.s.storage.types.all)
+			+ sum(p.s.storage.attr[b].net_present_cost_cost_constant * m[Symbol("binIncludeStorageCostConstant"*_n)][b] for b in p.s.storage.types.elec)
 		)
 
 		ex_name = "TotalPerUnitSizeOMCosts"*_n
@@ -120,11 +122,15 @@ function build_reopt!(m::JuMP.AbstractModel, ps::AbstractVector{REoptInputs{T}})
                             m[Symbol("dvProductionToStorage"*_n)][b, t, ts] == 0)
                 @constraint(m, [ts in p.time_steps], m[Symbol("dvDischargeFromStorage"*_n)][b, ts] == 0)
                 @constraint(m, [ts in p.time_steps], m[Symbol("dvGridToStorage"*_n)][b, ts] == 0)
+				if b in p.s.storage.types.elec
+					@constraint(m, m[Symbol("binIncludeStorageCostConstant"*_n)][b] == 0)
+				end
             else
                 add_storage_size_constraints(m, p, b; _n=_n)
                 add_general_storage_dispatch_constraints(m, p, b; _n=_n)
 				if b in p.s.storage.types.elec
 					add_elec_storage_dispatch_constraints(m, p, b; _n=_n)
+					add_elec_storage_cost_constant_constraints(m, p, b; _n=_n)
 				elseif b in p.s.storage.types.hot
 					add_hot_thermal_storage_dispatch_constraints(m, p, b; _n=_n)
 				elseif b in p.s.storage.types.cold

@@ -31,7 +31,10 @@ worth factor is used in the same manner irrespective of the `maintenance_strateg
     When modeling degradation the following ElectricStorage inputs are not used:
     - `replace_cost_per_kwh`
     - `battery_replacement_year`
-    The are replaced by the `maintenance_cost_per_kwh` vector.
+    - `installed_cost_constant`
+    - `replace_cost_constant`
+    - `cost_constant_replacement_year`
+    They are replaced by the `maintenance_cost_per_kwh` vector.
     Inverter replacement costs and inverter replacement year should still be used to model scheduled replacement of inverter.
 
 !!! note
@@ -140,6 +143,7 @@ The following shows how one would use the degradation model in REopt via the [Sc
 }
 ```
 Note that not all of the above inputs are necessary. When not providing `calendar_fade_coefficient` for example the default value will be used.
+
 """
 
 Base.@kwdef mutable struct Degradation
@@ -167,12 +171,15 @@ end
     soc_min_applies_during_outages::Bool = false
     soc_init_fraction::Float64 = off_grid_flag ? 1.0 : 0.5
     can_grid_charge::Bool = off_grid_flag ? false : true
-    installed_cost_per_kw::Real = 910.0
-    installed_cost_per_kwh::Real = 455.0
+    installed_cost_per_kw::Real = 910.0 # Cost of power components (e.g., inverter and BOS) 
+    installed_cost_per_kwh::Real = 455.0 # Cost of energy components (e.g., battery pack)
+    installed_cost_constant::Real = 0.0 # "+c" constant cost that is added to total ElectricStorage installed costs if a battery is included. Accounts for costs not expected to scale with power or energy capacity.
     replace_cost_per_kw::Real = 715.0
     replace_cost_per_kwh::Real = 318.0
+    replace_cost_constant::Real = 0.0
     inverter_replacement_year::Int = 10
     battery_replacement_year::Int = 10
+    cost_constant_replacement_year::Int = 10
     macrs_option_years::Int = 7
     macrs_bonus_fraction::Float64 = 0.6
     macrs_itc_reduction::Float64 = 0.5
@@ -204,10 +211,13 @@ Base.@kwdef struct ElectricStorageDefaults
     can_grid_charge::Bool = off_grid_flag ? false : true
     installed_cost_per_kw::Real = 910.0
     installed_cost_per_kwh::Real = 455.0
+    installed_cost_constant::Real = 0.0
     replace_cost_per_kw::Real = 715.0
     replace_cost_per_kwh::Real = 318.0
+    replace_cost_constant::Real = 0.0
     inverter_replacement_year::Int = 10
     battery_replacement_year::Int = 10
+    cost_constant_replacement_year::Int = 10
     macrs_option_years::Int = 7
     macrs_bonus_fraction::Float64 = 0.6
     macrs_itc_reduction::Float64 = 0.5
@@ -245,10 +255,13 @@ struct ElectricStorage <: AbstractElectricStorage
     can_grid_charge::Bool
     installed_cost_per_kw::Real
     installed_cost_per_kwh::Real
+    installed_cost_constant::Real
     replace_cost_per_kw::Real
     replace_cost_per_kwh::Real
+    replace_cost_constant::Real
     inverter_replacement_year::Int
     battery_replacement_year::Int
+    cost_constant_replacement_year::Int
     macrs_option_years::Int
     macrs_bonus_fraction::Float64
     macrs_itc_reduction::Float64
@@ -260,6 +273,7 @@ struct ElectricStorage <: AbstractElectricStorage
     grid_charge_efficiency::Float64
     net_present_cost_per_kw::Real
     net_present_cost_per_kwh::Real
+    net_present_cost_cost_constant::Real
     model_degradation::Bool
     degradation::Degradation
     minimum_avg_soc_fraction::Float64
@@ -318,10 +332,38 @@ struct ElectricStorage <: AbstractElectricStorage
 
         net_present_cost_per_kwh -= s.total_rebate_per_kwh
 
+        net_present_cost_cost_constant = effective_cost(;
+            itc_basis = s.installed_cost_constant,
+            replacement_cost = s.cost_constant_replacement_year >= f.analysis_years ? 0.0 : s.replace_cost_constant,
+            replacement_year = s.cost_constant_replacement_year,
+            discount_rate = f.owner_discount_rate_fraction,
+            tax_rate = f.owner_tax_rate_fraction,
+            itc = s.total_itc_fraction,
+            macrs_schedule = s.macrs_option_years == 7 ? f.macrs_seven_year : f.macrs_five_year,
+            macrs_bonus_fraction = s.macrs_bonus_fraction,
+            macrs_itc_reduction = s.macrs_itc_reduction
+
+        )
+
         if haskey(d, :degradation)
             degr = Degradation(;dictkeys_tosymbols(d[:degradation])...)
         else
             degr = Degradation()
+        end
+
+        # copy the replace_costs in case we need to change them
+        replace_cost_per_kw = s.replace_cost_per_kw 
+        replace_cost_per_kwh = s.replace_cost_per_kwh
+        replace_cost_constant = s.replace_cost_constant
+        if s.model_degradation
+            if haskey(d, :replace_cost_per_kw) && d[:replace_cost_per_kw] != 0.0 || 
+                haskey(d, :replace_cost_per_kwh) && d[:replace_cost_per_kwh] != 0.0 ||
+                haskey(d, :replace_cost_constant) && d[:replace_cost_constant] != 0.0
+                @warn "Setting ElectricStorage replacement costs to zero. Using degradation.maintenance_cost_per_kwh instead."
+            end
+            replace_cost_per_kw = 0.0
+            replace_cost_per_kwh = 0.0
+            replace_cost_constant = 0.0
         end
     
         return new(
@@ -338,10 +380,13 @@ struct ElectricStorage <: AbstractElectricStorage
             s.can_grid_charge,
             s.installed_cost_per_kw,
             s.installed_cost_per_kwh,
+            s.installed_cost_constant,
             replace_cost_per_kw,
             replace_cost_per_kwh,
+            replace_cost_constant,
             s.inverter_replacement_year,
             s.battery_replacement_year,
+            s.cost_constant_replacement_year,
             s.macrs_option_years,
             s.macrs_bonus_fraction,
             s.macrs_itc_reduction,
@@ -353,6 +398,7 @@ struct ElectricStorage <: AbstractElectricStorage
             s.grid_charge_efficiency,
             net_present_cost_per_kw,
             net_present_cost_per_kwh,
+            net_present_cost_cost_constant,
             s.model_degradation,
             degr,
             s.minimum_avg_soc_fraction,

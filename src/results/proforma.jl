@@ -74,10 +74,11 @@ function proforma_results(p::REoptInputs, d::Dict)
         storage = p.s.storage.attr["ElectricStorage"]
         total_kw = d["ElectricStorage"]["size_kw"]
         total_kwh = d["ElectricStorage"]["size_kwh"]
-        capital_cost = total_kw * storage.installed_cost_per_kw + total_kwh * storage.installed_cost_per_kwh
+        capital_cost = total_kw * storage.installed_cost_per_kw + total_kwh * storage.installed_cost_per_kwh + storage.installed_cost_constant
         battery_replacement_year = storage.battery_replacement_year
-        battery_replacement_cost = -1 * ((total_kw * storage.replace_cost_per_kw) + (
-                    total_kwh * storage.replace_cost_per_kwh))
+        battery_replacement_cost = -1 * ((total_kw * storage.replace_cost_per_kw) + 
+                    (total_kwh * storage.replace_cost_per_kwh) + 
+                    storage.replace_cost_constant)
         m.om_series += [yr != battery_replacement_year ? 0 : battery_replacement_cost for yr in 1:years]
 
         # storage only has cbi in the API

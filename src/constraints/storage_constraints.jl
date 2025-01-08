@@ -111,7 +111,7 @@ function add_elec_storage_dispatch_constraints(m, p, b; _n="")
         m[Symbol("dvStoragePower"*_n)][b] >= m[Symbol("dvDischargeFromStorage"*_n)][b,ts] + 
             sum(m[Symbol("dvProductionToStorage"*_n)][b, t, ts] for t in p.techs.elec)
     )
-					
+    	
     # Remove grid-to-storage as an option if option to grid charge is turned off
     if !(p.s.storage.attr[b].can_grid_charge)
         for ts in p.time_steps_with_grid
@@ -127,6 +127,16 @@ function add_elec_storage_dispatch_constraints(m, p, b; _n="")
         )
     end
 end
+
+function add_elec_storage_cost_constant_constraints(m, p, b; _n="")
+    # Include the electric storage cost constants only if the installed_cost_constant or the replace_cost_constant is not zero
+    if p.s.storage.attr[b].installed_cost_constant != 0 || p.s.storage.attr[b].replace_cost_constant != 0
+        # If there is a battery, then the binIncludeStorageCostConstant binary must be 1
+        @constraint(m, m[Symbol("dvStorageEnergy"*_n)][b] <= p.s.storage.attr[b].max_kwh * m[Symbol("binIncludeStorageCostConstant"*_n)][b])		
+    else
+        m[Symbol("binIncludeStorageCostConstant"*_n)][b] == 0
+    end
+end 
 
 function add_hot_thermal_storage_dispatch_constraints(m, p, b; _n="")
 

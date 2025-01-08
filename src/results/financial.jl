@@ -146,7 +146,8 @@ function initial_capex(m::JuMP.AbstractModel, p::REoptInputs; _n="")
     for b in p.s.storage.types.elec
         if p.s.storage.attr[b].max_kw > 0
             initial_capex += p.s.storage.attr[b].installed_cost_per_kw * value.(m[Symbol("dvStoragePower"*_n)])[b] + 
-                p.s.storage.attr[b].installed_cost_per_kwh * value.(m[Symbol("dvStorageEnergy"*_n)])[b]
+                p.s.storage.attr[b].installed_cost_per_kwh * value.(m[Symbol("dvStorageEnergy"*_n)])[b] +
+                (p.s.storage.attr[b].installed_cost_constant * value.(m[Symbol("binIncludeStorageCostConstant"*_n)])[b])
         end
     end
 
@@ -233,12 +234,20 @@ function replacement_costs_future_and_present(m::JuMP.AbstractModel, p::REoptInp
         else
             future_cost_storage = p.s.storage.attr[b].replace_cost_per_kwh * value.(m[Symbol("dvStorageEnergy"*_n)])[b]
         end
-        future_cost += future_cost_inverter + future_cost_storage
+        if p.s.storage.attr[b].cost_constant_replacement_year >= p.s.financial.analysis_years
+            future_cost_cost_constant = 0
+        else
+            future_cost_cost_constant = p.s.storage.attr[b].replace_cost_constant * value.(m[Symbol("binIncludeStorageCostConstant"*_n)])[b]
+        end
+
+        future_cost += future_cost_inverter + future_cost_storage + future_cost_cost_constant
 
         present_cost += future_cost_inverter * (1 - p.s.financial.owner_tax_rate_fraction) / 
             ((1 + p.s.financial.owner_discount_rate_fraction)^p.s.storage.attr[b].inverter_replacement_year)
         present_cost += future_cost_storage * (1 - p.s.financial.owner_tax_rate_fraction) / 
             ((1 + p.s.financial.owner_discount_rate_fraction)^p.s.storage.attr[b].battery_replacement_year)
+        present_cost += future_cost_cost_constant * (1 - p.s.financial.owner_tax_rate_fraction) / 
+            ((1 + p.s.financial.owner_discount_rate_fraction)^p.s.storage.attr[b].cost_constant_replacement_year)  
     end
 
     if !isempty(p.techs.gen) # Generator replacement 
