@@ -135,8 +135,14 @@ function add_export_constraints(m, p; _n="")
         if typeof(binNEM) <: Real  # no need for wholesale binary
             binWHL = 1
             WHL_benefit = @expression(m, p.pwf_e * p.hours_per_time_step *
-                sum( sum(p.s.electric_tariff.export_rates[:WHL][ts] * m[Symbol("dvProductionToGrid"*_n)][t, :WHL, ts] 
-                        for t in p.techs_by_exportbin[:WHL]) for ts in p.time_steps)
+                # sum( sum(p.s.electric_tariff.export_rates[:WHL][ts] * m[Symbol("dvProductionToGrid"*_n)][t, :WHL, ts] 
+                #         for t in p.techs_by_exportbin[:WHL]) for ts in p.time_steps)
+                sum(p.s.electric_tariff.export_rates[:WHL][ts] *
+                (
+                    sum(m[Symbol("dvStorageToGrid"*_n)][b, ts] for b in p.s.storage.types.elec) + ## TODO: index on metering type?
+                    sum(m[Symbol("dvProductionToGrid"*_n)][t, :WHL, ts] for t in p.techs_by_exportbin[:WHL])
+                ) for ts in p.time_steps
+            )
             )
         else
             binWHL = @variable(m, binary = true)

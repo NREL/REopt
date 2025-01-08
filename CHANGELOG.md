@@ -25,6 +25,10 @@ Classify the change according to the following categories:
     ### Deprecated
     ### Removed
 
+## bess-export
+### Added 
+- Added input option **can_export_to_grid** (defaults to _false_) to `ElectricStorage` and decision variable **dvStorageToGrid**
+- 
 
 ## leap-year-fix
 ### Fixed

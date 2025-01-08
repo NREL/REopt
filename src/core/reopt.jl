@@ -213,6 +213,7 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 				@constraint(m, [ts in p.time_steps], m[:dvGridToStorage][b, ts] == 0)
 				@constraint(m, [t in p.techs.elec, ts in p.time_steps_with_grid],
 						m[:dvProductionToStorage][b, t, ts] == 0)
+				@constraint(m, [ts in p.time_steps], m[Symbol("dvStorageToGrid"*_n)][b, ts] == 0)  # if there isn't a battery, then the battery can't export power to the grid
 			elseif b in p.s.storage.types.hot
 				@constraint(m, [q in q in setdiff(p.heating_loads, p.heating_loads_served_by_tes[b]), ts in p.time_steps], m[:dvHeatFromStorage][b,q,ts] == 0)
 				if "DomesticHotWater" in p.heating_loads_served_by_tes[b]
@@ -616,6 +617,7 @@ function add_variables!(m::JuMP.AbstractModel, p::REoptInputs)
 		dvProductionToStorage[p.s.storage.types.all, union(p.techs.ghp,p.techs.all), p.time_steps] >= 0  # Power from technology t used to charge storage system b [kW]
 		dvDischargeFromStorage[p.s.storage.types.all, p.time_steps] >= 0 # Power discharged from storage system b [kW]
 		dvGridToStorage[p.s.storage.types.elec, p.time_steps] >= 0 # Electrical power delivered to storage by the grid [kW]
+		dvStorageToGrid[p.s.storage.types.elec, p.time_steps] >= 0 # TODO, add: "p.StorageSalesTiers" as well? export of energy from storage to the grid
 		dvStoredEnergy[p.s.storage.types.all, 0:p.time_steps[end]] >= 0  # State of charge of storage system b
 		dvStoragePower[p.s.storage.types.all] >= 0   # Power capacity of storage system b [kW]
 		dvStorageEnergy[p.s.storage.types.all] >= 0   # Energy capacity of storage system b [kWh]

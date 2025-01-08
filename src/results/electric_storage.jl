@@ -3,8 +3,9 @@
 `ElectricStorage` results keys:
 - `size_kw` Optimal inverter capacity
 - `size_kwh` Optimal storage capacity
-- `soc_series_fraction` Vector of normalized (0-1) state of charge values over the first year
-- `storage_to_load_series_kw` Vector of power used to meet load over the first year
+- `soc_series_fraction` Vector of normalized (0-1) state of charge values over an average year
+- `storage_to_load_series_kw` Vector of power used to meet load over an average year
+- `storage_to_grid_series_kw` Vector of power exported to the grid over an average year
 - `initial_capital_cost` Upfront capital cost for storage and inverter
 # The following results are reported if storage degradation is modeled:
 - `state_of_health`
@@ -44,9 +45,13 @@ function add_electric_storage_results(m::JuMP.AbstractModel, p::REoptInputs, d::
             end
             r["residual_value"] = value(m[:residual_value])
          end
+
+         # report the exported electricity from the battery:
+         r["storage_to_grid_series_kw"] = round.(value.(m[Symbol("dvStorageToGrid"*_n)][b, ts] for ts in p.time_steps), digits = 3)
     else
         r["soc_series_fraction"] = []
         r["storage_to_load_series_kw"] = []
+        r["storage_to_grid_series_kw"] = []
     end
 
     d[b] = r

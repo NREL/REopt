@@ -167,6 +167,7 @@ end
     soc_min_applies_during_outages::Bool = false
     soc_init_fraction::Float64 = off_grid_flag ? 1.0 : 0.5
     can_grid_charge::Bool = off_grid_flag ? false : true
+    can_export_to_grid::Bool = false
     installed_cost_per_kw::Real = 910.0
     installed_cost_per_kwh::Real = 455.0
     replace_cost_per_kw::Real = 715.0
@@ -202,6 +203,7 @@ Base.@kwdef struct ElectricStorageDefaults
     soc_min_applies_during_outages::Bool = false
     soc_init_fraction::Float64 = off_grid_flag ? 1.0 : 0.5
     can_grid_charge::Bool = off_grid_flag ? false : true
+    can_export_to_grid::Bool = false
     installed_cost_per_kw::Real = 910.0
     installed_cost_per_kwh::Real = 455.0
     replace_cost_per_kw::Real = 715.0
@@ -243,6 +245,7 @@ struct ElectricStorage <: AbstractElectricStorage
     soc_min_applies_during_outages::Bool
     soc_init_fraction::Float64
     can_grid_charge::Bool
+    can_export_to_grid::Bool
     installed_cost_per_kw::Real
     installed_cost_per_kwh::Real
     replace_cost_per_kw::Real
@@ -336,6 +339,7 @@ struct ElectricStorage <: AbstractElectricStorage
             s.soc_min_applies_during_outages,
             s.soc_init_fraction,
             s.can_grid_charge,
+            s.can_export_to_grid,
             s.installed_cost_per_kw,
             s.installed_cost_per_kwh,
             replace_cost_per_kw,

@@ -2,8 +2,8 @@
 """
 `HotThermalStorage` results keys:
 - `size_gal` Optimal TES capacity, by volume [gal]
-- `soc_series_fraction` Vector of normalized (0-1) state of charge values over the first year [-]
-- `storage_to_load_series_mmbtu_per_hour` Vector of power used to meet load over the first year [MMBTU/hr]
+- `soc_series_fraction` Vector of normalized (0-1) state of charge values over an average year [-]
+- `storage_to_load_series_mmbtu_per_hour` Vector of power used to meet load over an average year [MMBTU/hr]
 
 !!! note "'Series' and 'Annual' energy outputs are average annual"
 	REopt performs load balances using average annual production values for technologies that include degradation. 
@@ -84,8 +84,8 @@ end
 """
 `ColdThermalStorage` results:
 - `size_gal` Optimal TES capacity, by volume [gal]
-- `soc_series_fraction` Vector of normalized (0-1) state of charge values over the first year [-]
-- `storage_to_load_series_ton` Vector of power used to meet load over the first year [ton]
+- `soc_series_fraction` Vector of normalized (0-1) state of charge values over an average year [-]
+- `storage_to_load_series_ton` Vector of power used to meet load over an average year [ton]
 """
 function add_cold_storage_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dict, b::String; _n="")
     #=
