@@ -47,7 +47,7 @@
         "avert_emissions_region": "New England",
         "cambium_location_type": "GEA Regions",
         "cambium_levelization_years": 1,
-        "cambium_metric_col": "lrmer_co2e",
+        "cambium_co2_metric": "lrmer_co2e",
         "cambium_scenario": "Mid-case",
         "cambium_grid_level": "enduse"
     },

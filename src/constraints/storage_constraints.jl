@@ -38,10 +38,21 @@ end
 
 
 function add_general_storage_dispatch_constraints(m, p, b; _n="")
-    # Constraint (4a): initial state of charge
-	@constraint(m,
-        m[Symbol("dvStoredEnergy"*_n)][b, 0] == p.s.storage.attr[b].soc_init_fraction * m[Symbol("dvStorageEnergy"*_n)][b]
-    )
+    # Constraint (4a): initial and final state of charge
+    if hasproperty(p.s.storage.attr[b], :optimize_soc_init_fraction) && p.s.storage.attr[b].optimize_soc_init_fraction
+        print("\nOptimizing "*b*" inital SOC and constraining initial SOC = final SOC. soc_init_fraction will not apply.\n")
+        @constraint(m,
+            m[Symbol("dvStoredEnergy"*_n)][b, 0] == m[:dvStoredEnergy][b, maximum(p.time_steps)]
+        )
+    else
+        @constraint(m,
+            m[Symbol("dvStoredEnergy"*_n)][b, 0] == p.s.storage.attr[b].soc_init_fraction * m[Symbol("dvStorageEnergy"*_n)][b]
+        )
+        # TODO: constrain final soc to equal initial soc even when not optimized (ran into feasibility issues)
+        # @constraint(m,
+        #     m[Symbol("dvStoredEnergy"*_n)][b, maximum(p.time_steps)] == p.s.storage.attr[b].soc_init_fraction * m[Symbol("dvStorageEnergy"*_n)][b]
+        # )
+    end
 
     #Constraint (4n): State of charge upper bound is storage system size
     @constraint(m, [ts in p.time_steps],

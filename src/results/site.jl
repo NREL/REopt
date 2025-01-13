@@ -5,9 +5,11 @@
 Adds the Site results to the dictionary passed back from `run_reopt` using the solved model `m` and the `REoptInputs`.
 
 Site results:
-- `annual_renewable_electricity_kwh`
-- `renewable_electricity_fraction`
-- `total_renewable_energy_fraction`
+- `annual_onsite_renewable_electricity_kwh` # renewable electricity from on-site renewable electricity-generating technologies (including fuel-burning technologies)
+- `onsite_renewable_electricity_fraction_of_elec_load`
+- `onsite_and_grid_renewable_electricity_fraction_of_elec_load`
+- `onsite_renewable_energy_fraction_of_total_load`
+- `onsite_and_grid_renewable_energy_fraction_of_total_load`
 - `annual_emissions_tonnes_CO2` # Average annual total tons of emissions associated with the site's grid-purchased electricity and on-site fuel consumption.
 - `annual_emissions_tonnes_NOx` # Average annual total tons of emissions associated with the site's grid-purchased electricity and on-site fuel consumption.
 - `annual_emissions_tonnes_SO2` # Average annual total tons of emissions associated with the site's grid-purchased electricity and on-site fuel consumption.
@@ -42,12 +44,14 @@ function add_site_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dict; _n="")
 	r = Dict{String, Any}()
 
 	# renewable elec
-	r["annual_renewable_electricity_kwh"] = round(value(m[:AnnualREEleckWh]), digits=2)
-	r["renewable_electricity_fraction"] = round(value(m[:AnnualREEleckWh])/value(m[:AnnualEleckWh]), digits=6)
+	r["annual_onsite_renewable_electricity_kwh"] = round(value(m[:AnnualOnsiteREEleckWh]), digits=2)
+	r["onsite_renewable_electricity_fraction_of_elec_load"] = round(value(m[:AnnualOnsiteREEleckWh])/value(m[:AnnualEleckWh]), digits=4)
+	r["onsite_and_grid_renewable_electricity_fraction_of_elec_load"] = round((value(m[:AnnualOnsiteREEleckWh]) + value(m[:AnnualGridREEleckWh])) /value(m[:AnnualEleckWh]), digits=4)
 
 	# total renewable energy
 	add_re_tot_calcs(m,p)
-	r["total_renewable_energy_fraction"] = round(value(m[:AnnualRETotkWh])/value(m[:AnnualTotkWh]), digits=6)
+	r["onsite_renewable_energy_fraction_of_total_load"] = round(value(m[:AnnualOnsiteRETotkWh])/value(m[:AnnualTotkWh]), digits=4)
+	r["onsite_and_grid_renewable_energy_fraction_of_total_load"] = round((value(m[:AnnualOnsiteRETotkWh]) + value(m[:AnnualGridREEleckWh]))/value(m[:AnnualTotkWh]), digits=4)
 
 	# Lifecycle emissions results at Site level
 	if !isnothing(p.s.site.bau_emissions_lb_CO2_per_year)
@@ -64,16 +68,11 @@ function add_site_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dict; _n="")
 	r["lifecycle_emissions_from_fuelburn_tonnes_PM25"] = round(value(m[:Lifecycle_Emissions_Lbs_PM25_fuelburn]*TONNE_PER_LB), digits=2)
 
 	# Simple Average Annual Emissions results at Site level (total divided by analysis period)
-	r["annual_emissions_tonnes_CO2"] = r["lifecycle_emissions_tonnes_CO2"] / p.s.financial.analysis_years
-	r["annual_emissions_tonnes_NOx"] = r["lifecycle_emissions_tonnes_NOx"] / p.s.financial.analysis_years
-	r["annual_emissions_tonnes_SO2"] = r["lifecycle_emissions_tonnes_SO2"] / p.s.financial.analysis_years
-	r["annual_emissions_tonnes_PM25"] = r["lifecycle_emissions_tonnes_PM25"] / p.s.financial.analysis_years
-
-	r["annual_emissions_from_fuelburn_tonnes_CO2"] = r["lifecycle_emissions_from_fuelburn_tonnes_CO2"] / p.s.financial.analysis_years
-	r["annual_emissions_from_fuelburn_tonnes_NOx"] = r["lifecycle_emissions_from_fuelburn_tonnes_NOx"] / p.s.financial.analysis_years
-	r["annual_emissions_from_fuelburn_tonnes_SO2"] = r["lifecycle_emissions_from_fuelburn_tonnes_SO2"] / p.s.financial.analysis_years
-	r["annual_emissions_from_fuelburn_tonnes_PM25"] = r["lifecycle_emissions_from_fuelburn_tonnes_PM25"] / p.s.financial.analysis_years
-
+	for em in ["CO2", "NOx", "SO2", "PM25"]
+		r["annual_emissions_tonnes_$(em)"] = r["lifecycle_emissions_tonnes_$(em)"] / p.s.financial.analysis_years
+		r["annual_emissions_from_fuelburn_tonnes_$(em)"] = r["lifecycle_emissions_from_fuelburn_tonnes_$(em)"] / p.s.financial.analysis_years
+	end
+	
 	d["Site"] = r
 end
 
@@ -138,7 +137,7 @@ function add_re_tot_calcs(m::JuMP.AbstractModel, p::REoptInputs)
 			# - AnnualSteamToSteamTurbine # minus steam going to SteamTurbine; already adjusted by p.hours_per_time_step
 		)
 	end 
-	m[:AnnualRETotkWh] = @expression(m, m[:AnnualREEleckWh] + AnnualREHeatkWh)
-	m[:AnnualTotkWh] = @expression(m, m[:AnnualEleckWh] + AnnualHeatkWh)
+	m[:AnnualOnsiteRETotkWh] = @expression(m, m[:AnnualOnsiteREEleckWh] + AnnualREHeatkWh)
+	m[:AnnualTotkWh] = @expression(m, m[:AnnualEleckWh] + AnnualHeatkWh) # TODO: ensure no double counting once AnnualEleckWh accounts for electric heating and cooling loads
 	nothing
 end

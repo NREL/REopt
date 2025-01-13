@@ -5,17 +5,20 @@
 Inputs used when `ElectricStorage.model_degradation` is `true`:
 ```julia
 Base.@kwdef mutable struct Degradation
-    calendar_fade_coefficient::Real = 2.46E-03
-    cycle_fade_coefficient::Real = 7.82E-05
-    time_exponent::Real = 0.5
-    installed_cost_per_kwh_declination_rate::Float64 = 0.05
+    calendar_fade_coefficient::Real = 2.55E-03
+    cycle_fade_coefficient::Real = 9.83E-05
+    time_exponent::Real = 0.42
+    installed_cost_per_kwh_declination_rate::Real = 0.05
     maintenance_strategy::String = "augmentation"  # one of ["augmentation", "replacement"]
     maintenance_cost_per_kwh::Vector{<:Real} = Real[]
 end
 ```
 
 None of the above values are required. If `ElectricStorage.model_degradation` is `true` then the 
-defaults above are used. If the `maintenance_cost_per_kwh` is not provided then it is determined using the `ElectricStorage.installed_cost_per_kwh` and the `installed_cost_per_kwh_declination_rate` along with a present worth factor ``f`` to account for the present cost of buying a battery in the future. The present worth factor for each day is:
+defaults above are used. If the `maintenance_cost_per_kwh` is not provided then it is determined 
+using the `ElectricStorage.installed_cost_per_kwh` and the `installed_cost_per_kwh_declination_rate` 
+along with a present worth factor ``f`` to account for the present cost of buying a battery in the 
+future. The present worth factor for each day is:
 
 ``
 f(day) = \\frac{ (1-r_g)^\\frac{day}{365} } { (1+r_d)^\\frac{day}{365} }
@@ -185,6 +188,7 @@ end
     model_degradation::Bool = false
     degradation::Dict = Dict()
     minimum_avg_soc_fraction::Float64 = 0.0
+    optimize_soc_init_fraction::Bool = false # If true, soc_init_fraction will not apply. Model will optimize initial SOC and constrain initial SOC = final SOC. 
     min_duration_hours::Real = 0.0 # Minimum amount of time storage can discharge at its rated power capacity
     max_duration_hours::Real = 100000.0 # Maximum amount of time storage can discharge at its rated power capacity (ratio of ElectricStorage size_kwh to size_kw)
 ```
@@ -220,6 +224,7 @@ Base.@kwdef struct ElectricStorageDefaults
     model_degradation::Bool = false
     degradation::Dict = Dict()
     minimum_avg_soc_fraction::Float64 = 0.0
+    optimize_soc_init_fraction::Bool = false
     min_duration_hours::Real = 0.0
     max_duration_hours::Real = 100000.0
 end
@@ -263,6 +268,7 @@ struct ElectricStorage <: AbstractElectricStorage
     model_degradation::Bool
     degradation::Degradation
     minimum_avg_soc_fraction::Float64
+    optimize_soc_init_fraction::Bool
     min_duration_hours::Real
     max_duration_hours::Real
 
@@ -356,6 +362,7 @@ struct ElectricStorage <: AbstractElectricStorage
             s.model_degradation,
             degr,
             s.minimum_avg_soc_fraction,
+            s.optimize_soc_init_fraction,
             s.min_duration_hours,
             s.max_duration_hours
         )

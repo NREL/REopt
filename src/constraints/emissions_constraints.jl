@@ -14,7 +14,7 @@ function add_emissions_constraints(m,p)
 				(1-p.s.site.CO2_emissions_reduction_max_fraction) * m[:Lifecycle_Emissions_Lbs_CO2_BAU]
 			)
 		end
-	else
+	elseif !isnothing(p.s.site.CO2_emissions_reduction_min_fraction) || !isnothing(p.s.site.CO2_emissions_reduction_max_fraction)
 		@warn "No emissions reduction constraints added, as BAU emissions have not been calculated."
 	end
 end

@@ -1,7 +1,7 @@
 # REopt®, Copyright (c) Alliance for Sustainable Energy, LLC. See also https://github.com/NREL/REopt.jl/blob/master/LICENSE.
 """
 `ElectricLoad` results keys:
-- `load_series_kw` vector of site load in every time step
+- `load_series_kw` vector of site load in every time step. Does not (currently) include electric load for any new heating or cool techs.
 - `critical_load_series_kw` vector of site critical load in every time step
 - `annual_calculated_kwh` sum of the `load_series_kw`
 - `offgrid_load_met_series_kw` vector of electric load met by generation techs, for off-grid scenarios only

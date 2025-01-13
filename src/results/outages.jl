@@ -38,9 +38,6 @@
 
 !!! note 
 	`Outage` results only added to results when multiple outages are modeled via the `ElectricUtility.outage_start_time_steps` and `ElectricUtility.outage_durations` inputs.
-
-!!! note
-	When modeling PV the name of the PV system is used for the output keys to allow for modeling multiple PV systems. The default PV name is `PV`.
 	
 !!! warn
 	The Outage results can be very large when many outages are modeled and can take a long time to generate.

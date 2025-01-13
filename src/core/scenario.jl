@@ -162,7 +162,8 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
                                             emissions_factor_series_lb_CO2_per_kwh = 0,
                                             emissions_factor_series_lb_NOx_per_kwh = 0,
                                             emissions_factor_series_lb_SO2_per_kwh = 0,
-                                            emissions_factor_series_lb_PM25_per_kwh = 0
+                                            emissions_factor_series_lb_PM25_per_kwh = 0,
+                                            renewable_energy_fraction_series = 0
                                         ) 
     end
         
