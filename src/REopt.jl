@@ -100,10 +100,10 @@ const FUEL_DEFAULTS = Dict(
     )
 )
 const EMISSIONS_DECREASE_DEFAULTS = Dict(
-    "CO2e" => 0.02163,
-    "NOx" => 0.02163,
-    "SO2" => 0.02163,
-    "PM25" => 0.02163
+    "CO2e" => 0.0459,
+    "NOx" => 0.0459,
+    "SO2" => 0.0459,
+    "PM25" => 0.0459
 )
 const INDICATOR_COMPATIBLE_SOLVERS = ["CPLEX","Xpress"]
 
