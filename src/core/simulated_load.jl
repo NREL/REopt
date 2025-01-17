@@ -16,6 +16,7 @@ One particular aspect of this function specifically for the webtool/UI is the he
 function simulated_load(d::Dict)
     # Latitude and longitude are required if not normalizing and scaling load profile input
     normalize_and_scale_load_profile_input = get(d, "normalize_and_scale_load_profile_input", false)
+    year = get(d, "year", 2017)
     latitude = get(d, "latitude", 0.0)
     longitude = get(d, "longitude", 0.0)
     if (isnothing(latitude) || isnothing(longitude)) && !normalize_and_scale_load_profile_input
@@ -158,6 +159,7 @@ function simulated_load(d::Dict)
             elec_load_inputs[:normalize_and_scale_load_profile_input] = normalize_and_scale_load_profile_input
             elec_load_inputs[:loads_kw] = load_profile
         end
+        elec_load_inputs[:year] = year
 
         electric_load = ElectricLoad(; elec_load_inputs...,
                                 latitude=latitude,
@@ -176,6 +178,8 @@ function simulated_load(d::Dict)
             else
                 cooling_load_inputs[:doe_reference_name] = cooling_doe_ref_name[1]
             end
+            cooling_load_inputs[:year] = year
+
             cooling_load = CoolingLoad(; cooling_load_inputs...,
                                         city=electric_load.city,
                                         latitude=latitude,
@@ -286,6 +290,7 @@ function simulated_load(d::Dict)
         if addressable_load_fraction != 1.0
             heating_load_inputs[:addressable_load_fraction] = addressable_load_fraction
         end
+        heating_load_inputs[:year] = year
     
         # Split up the single heating fuel input for space + dhw annual_mmbtu or monthly_mmbtu into CRB profile split
         boiler_efficiency = get(d, "boiler_efficiency", EXISTING_BOILER_EFFICIENCY)
@@ -313,8 +318,8 @@ function simulated_load(d::Dict)
         dhw_monthly_fuel_mmbtu = Vector{Real}()
     
         if !isempty(monthly_mmbtu)    
-            space_heating_monthly_energy =   get_monthly_energy(default_space_heating_load.loads_kw)
-            dhw_monthly_energy           =   get_monthly_energy(default_dhw_load.loads_kw)
+            space_heating_monthly_energy =   get_monthly_energy(default_space_heating_load.loads_kw; year=year)
+            dhw_monthly_energy           =   get_monthly_energy(default_dhw_load.loads_kw; year=year)
             
             total_monthly_energy        =   space_heating_monthly_energy + dhw_monthly_energy
             
@@ -461,6 +466,7 @@ function simulated_load(d::Dict)
         if addressable_load_fraction != 1.0
             heating_load_inputs[:addressable_load_fraction] = addressable_load_fraction
         end
+        heating_load_inputs[:year] = year
 
         heating_load = HeatingLoad(; heating_load_inputs...,
                                     load_type = load_type,
@@ -472,7 +478,7 @@ function simulated_load(d::Dict)
                                 )
 
         load_series = heating_load.loads_kw ./ boiler_efficiency ./ KWH_PER_MMBTU  # [MMBtu/hr fuel]
-        heating_monthly_energy = get_monthly_energy(load_series)
+        heating_monthly_energy = get_monthly_energy(load_series; year=year)
     
         response = Dict([
             ("load_type", load_type),
@@ -530,9 +536,12 @@ function simulated_load(d::Dict)
                     throw(@error("monthly_fraction must contain a value between 0-1 for each month, and it is not valid for these months: $bad_index"))
                 end
             end
-            days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]  # Only relevant for 2017 the CRB year, not for leap year
+            days_in_month = [daysinmonth(Date(string(year) * "-" * string(month))) for month in 1:12]
             fraction_series = []
             for i in 1:12
+                if month == 12 && isleapyear(year)
+                    days_in_month[i] -= 1
+                end
                 append!(fraction_series, fill!(zeros(days_in_month[i] * 24), monthly_fraction[i]))
             end
             response = Dict([
@@ -577,7 +586,8 @@ function simulated_load(d::Dict)
                 cooling_load_inputs[:blended_doe_reference_percents] = percent_share_list
             else
                 cooling_load_inputs[:doe_reference_name] = doe_reference_name[1]
-            end                
+            end
+            cooling_load_inputs[:year] = year     
 
             cooling_load = CoolingLoad(; cooling_load_inputs...,
                                         latitude = latitude, 

@@ -3,12 +3,12 @@
 `ElectricLoad` is a required REopt input with the following keys and default values:
 ```julia
     loads_kw::Array{<:Real,1} = Real[],
-    normalize_and_scale_load_profile_input::Bool = false,  # Takes loads_kw and normalizes and scales it to annual or monthly energy
+    normalize_and_scale_load_profile_input::Bool = false,  # Takes loads_kw and normalizes and scales it to annual_kwh or monthly_totals_kwh
     path_to_csv::String = "", # for csv containing loads_kw
     doe_reference_name::String = "",
     blended_doe_reference_names::Array{String, 1} = String[],
     blended_doe_reference_percents::Array{<:Real,1} = Real[], # Values should be between 0-1 and sum to 1.0
-    year::Int = doe_reference_name ≠ "" || blended_doe_reference_names ≠ String[] ? 2017 : 2022, # used in ElectricTariff to align rate schedule with weekdays/weekends. DOE CRB profiles must use 2017. If providing load data, specify year of data.
+    year::Union{Int, Nothing} = doe_reference_name ≠ "" || blended_doe_reference_names ≠ String[] ? 2017 : nothing, # used in ElectricTariff to align rate schedule with weekdays/weekends. DOE CRB profiles defaults to using 2017. If providing load data, specify year of data.
     city::String = "",
     annual_kwh::Union{Real, Nothing} = nothing,
     monthly_totals_kwh::Array{<:Real,1} = Real[],
@@ -92,7 +92,7 @@ mutable struct ElectricLoad  # mutable to adjust (critical_)loads_kw based off o
         doe_reference_name::String = "",
         blended_doe_reference_names::Array{String, 1} = String[],
         blended_doe_reference_percents::Array{<:Real,1} = Real[],
-        year::Int = doe_reference_name ≠ "" || blended_doe_reference_names ≠ String[] ? 2017 : 2022, # used in ElectricTariff to align rate schedule with weekdays/weekends. DOE CRB profiles must use 2017. If providing load data, specify year of data.
+        year::Union{Int, Nothing} = doe_reference_name ≠ "" || blended_doe_reference_names ≠ String[] ? 2017 : nothing, # used in ElectricTariff to align rate schedule with weekdays/weekends. DOE CRB profiles 2017 by default. If providing load data, specify year of data.
         city::String = "",
         annual_kwh::Union{Real, Nothing} = nothing,
         monthly_totals_kwh::Array{<:Real,1} = Real[],
@@ -128,6 +128,10 @@ mutable struct ElectricLoad  # mutable to adjust (critical_)loads_kw based off o
             end
         end
 
+        if isnothing(year)
+            throw(@error("Must provide the year when using loads_kw input."))
+        end 
+
         if length(loads_kw) > 0 && !normalize_and_scale_load_profile_input
 
             if !(length(loads_kw) / time_steps_per_hour ≈ 8760)
@@ -143,7 +147,6 @@ mutable struct ElectricLoad  # mutable to adjust (critical_)loads_kw based off o
             end
             # Using dummy values for all unneeded location and building type arguments for normalizing and scaling load profile input
             normalized_profile = loads_kw ./ sum(loads_kw)
-            # Need year still mainly for
             loads_kw = BuiltInElectricLoad("Chicago", "LargeOffice", 41.8333, -88.0616, year, annual_kwh, monthly_totals_kwh, normalized_profile)            
 
         elseif !isempty(path_to_csv)
@@ -158,11 +161,6 @@ mutable struct ElectricLoad  # mutable to adjust (critical_)loads_kw based off o
             end
     
         elseif !isempty(doe_reference_name)
-            # NOTE: must use year that starts on Sunday with DOE reference doe_ref_profiles
-            if year != 2017
-                @warn "Changing load profile year to 2017 because DOE reference profiles start on a Sunday."
-            end
-            year = 2017
             loads_kw = BuiltInElectricLoad(city, doe_reference_name, latitude, longitude, year, annual_kwh, monthly_totals_kwh)
 
         elseif length(blended_doe_reference_names) > 1 && 
@@ -170,7 +168,6 @@ mutable struct ElectricLoad  # mutable to adjust (critical_)loads_kw based off o
             loads_kw = blend_and_scale_doe_profiles(BuiltInElectricLoad, latitude, longitude, year, 
                                                     blended_doe_reference_names, blended_doe_reference_percents, city, 
                                                     annual_kwh, monthly_totals_kwh)
-            # TODO: Should also warn here about year 2017
         else
             throw(@error("Cannot construct ElectricLoad. You must provide either [loads_kw], [doe_reference_name, city], 
                   [doe_reference_name, latitude, longitude], 

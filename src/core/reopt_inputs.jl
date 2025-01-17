@@ -953,14 +953,7 @@ function setup_ASHPSpaceHeater_inputs(s, max_sizes, min_sizes, cap_cost_slope, o
     if s.ashp.min_allowable_kw > 0.0
         cap_cost_slope["ASHPSpaceHeater"] = s.ashp.installed_cost_per_kw
         push!(segmented_techs, "ASHPSpaceHeater")
-        #as a reasonable big-M, assume 10 times the size to serve 100% of peak load.
-        ashp_sh_max_size = get_ashp_default_min_allowable_size(s.space_heating_load.loads_kw, 
-            s.ashp.heating_cf, 
-            s.cooling_load.loads_kw_thermal, 
-            s.ashp.cooling_cf,
-            10.0
-        )
-        seg_max_size["ASHPSpaceHeater"] = Dict{Int,Float64}(1 => min(s.ashp.max_kw, ashp_sh_max_size))
+        seg_max_size["ASHPSpaceHeater"] = Dict{Int,Float64}(1 => min(s.ashp.max_kw))
         seg_min_size["ASHPSpaceHeater"] = Dict{Int,Float64}(1 => s.ashp.min_allowable_kw)
         n_segs_by_tech["ASHPSpaceHeater"] = 1
         seg_yint["ASHPSpaceHeater"] = Dict{Int,Float64}(1 => 0.0)
@@ -997,14 +990,7 @@ function setup_ASHPWaterHeater_inputs(s, max_sizes, min_sizes, cap_cost_slope, o
     if s.ashp_wh.min_allowable_kw > 0.0
         cap_cost_slope["ASHPWaterHeater"] = s.ashp_wh.installed_cost_per_kw
         push!(segmented_techs, "ASHPWaterHeater")
-        #as a reasonable big-M, assume 10 times the size to serve 100% of peak load.
-        ashp_wh_max_size = get_ashp_default_min_allowable_size(s.dhw_load.loads_kw, 
-            s.ashp_wh.heating_cf, 
-            Real[], 
-            Real[],
-            10.0
-        )
-        seg_max_size["ASHPWaterHeater"] = Dict{Int,Float64}(1 => min(s.ashp_wh.max_kw, ashp_wh_max_size))
+        seg_max_size["ASHPWaterHeater"] = Dict{Int,Float64}(1 => s.ashp_wh.max_kw)
         seg_min_size["ASHPWaterHeater"] = Dict{Int,Float64}(1 => s.ashp_wh.min_allowable_kw)
         n_segs_by_tech["ASHPWaterHeater"] = 1
         seg_yint["ASHPWaterHeater"] = Dict{Int,Float64}(1 => 0.0)

@@ -9,11 +9,13 @@
     industrial_reference_name::String = "",  # For ProcessHeatLoad
     blended_industrial_reference_names::Array{String, 1} = String[],  # For ProcessHeatLoad
     blended_industrial_reference_percents::Array{<:Real,1} = Real[],  # For ProcessHeatLoad
-    addressable_load_fraction::Any = 1.0,  # Fraction of input fuel load which is addressable by heating technologies. Can be a scalar or vector with length aligned with use of monthly_mmbtu or fuel_loads_mmbtu_per_hour.
+    city::String = "",
+    year::Union{Int, Nothing} = doe_reference_name ≠ "" || blended_doe_reference_names ≠ String[] || industrial_reference_name ≠ "" || blended_industrial_reference_names ≠ String[] ? 2017 : nothing, # CRB profiles are 2017 by default. If providing load profile, specify year of data.
     annual_mmbtu::Union{Real, Nothing} = nothing,
     monthly_mmbtu::Array{<:Real,1} = Real[],
+    addressable_load_fraction::Any = 1.0,  # Fraction of input fuel load which is addressable by heating technologies. Can be a scalar or vector with length aligned with use of monthly_mmbtu or fuel_loads_mmbtu_per_hour.
     fuel_loads_mmbtu_per_hour::Array{<:Real,1} = Real[], # Vector of space heating fuel loads [mmbtu/hr]. Length must equal 8760 * `Settings.time_steps_per_hour`
-    normalize_and_scale_load_profile_input::Bool = false,  # Takes fuel_loads_mmbtu_per_hour and normalizes and scales it to annual or monthly energy
+    normalize_and_scale_load_profile_input::Bool = false,  # Takes fuel_loads_mmbtu_per_hour and normalizes and scales it to annual_mmbtu or monthly_mmbtu 
     existing_boiler_efficiency::Real = NaN
 ```
 
@@ -49,7 +51,7 @@ function HeatingLoad(;
     blended_industrial_reference_names::Array{String, 1} = String[],
     blended_industrial_reference_percents::Array{<:Real,1} = Real[],    
     city::String = "",
-    year::Int = doe_reference_name ≠ "" || blended_doe_reference_names ≠ String[] ? 2017 : 2022, # CRB profiles must use 2017. If providing load profile, specify year of data.
+    year::Union{Int, Nothing} = doe_reference_name ≠ "" || blended_doe_reference_names ≠ String[] || industrial_reference_name ≠ "" || blended_industrial_reference_names ≠ String[] ? 2017 : nothing, # CRB profiles are 2017 by default. If providing load profile, specify year of data.
     annual_mmbtu::Union{Real, Nothing} = nothing,
     monthly_mmbtu::Array{<:Real,1} = Real[],
     addressable_load_fraction::Any = 1.0,
@@ -78,6 +80,10 @@ function HeatingLoad(;
     else
         throw(@error("load_type must be 'space_heating', 'domestic_hot_water', or 'process_heat'"))
     end
+
+    if isnothing(year)
+        throw(@error("Must provide the year when using fuel_loads_mmbtu_per_hour input."))
+    end     
 
     if length(addressable_load_fraction) > 1
         if !isempty(fuel_loads_mmbtu_per_hour) && length(addressable_load_fraction) != length(fuel_loads_mmbtu_per_hour)
@@ -118,14 +124,14 @@ function HeatingLoad(;
         loads_kw = BuiltInHeatingLoad(load_type, "Chicago", "FlatLoad", 41.8333, -88.0616, year, addressable_load_fraction, annual_mmbtu, monthly_mmbtu, existing_boiler_efficiency, normalized_profile)               
         unaddressable_annual_fuel_mmbtu = get_unaddressable_fuel(addressable_load_fraction, annual_mmbtu, monthly_mmbtu, loads_kw, existing_boiler_efficiency)
     elseif !isempty(doe_reference_name)
-        loads_kw = BuiltInHeatingLoad(load_type, city, doe_reference_name, latitude, longitude, 2017, addressable_load_fraction, annual_mmbtu, monthly_mmbtu, existing_boiler_efficiency)
+        loads_kw = BuiltInHeatingLoad(load_type, city, doe_reference_name, latitude, longitude, year, addressable_load_fraction, annual_mmbtu, monthly_mmbtu, existing_boiler_efficiency)
         if length(blended_doe_reference_names) > 0
             @warn "SpaceHeatingLoad doe_reference_name was provided, so blended_doe_reference_names will be ignored."
         end
         unaddressable_annual_fuel_mmbtu = get_unaddressable_fuel(addressable_load_fraction, annual_mmbtu, monthly_mmbtu, loads_kw, existing_boiler_efficiency)           
     elseif length(blended_doe_reference_names) > 0 && 
         length(blended_doe_reference_names) == length(blended_doe_reference_percents)
-        loads_kw = blend_and_scale_doe_profiles(BuiltInHeatingLoad, latitude, longitude, 2017, 
+        loads_kw = blend_and_scale_doe_profiles(BuiltInHeatingLoad, latitude, longitude, year, 
                                                 blended_doe_reference_names, blended_doe_reference_percents, city, 
                                                 annual_mmbtu, monthly_mmbtu, addressable_load_fraction,
                                                 existing_boiler_efficiency, load_type)
@@ -249,9 +255,10 @@ end
 `CoolingLoad` is an optional REopt input with the following keys and default values:
 ```julia
     doe_reference_name::String = "",
-    city::String = "",
     blended_doe_reference_names::Array{String, 1} = String[],
     blended_doe_reference_percents::Array{<:Real,1} = Real[],
+    city::String = "",
+    year::Int = doe_reference_name ≠ "" || blended_doe_reference_names ≠ String[] ? 2017 : nothing, # CRB profiles are 2017 by default. If providing load profile, specify year of data.    
     annual_tonhour::Union{Real, Nothing} = nothing,
     monthly_tonhour::Array{<:Real,1} = Real[],
     thermal_loads_ton::Array{<:Real,1} = Real[], # Vector of cooling thermal loads [ton] = [short ton hours/hour]. Length must equal 8760 * `Settings.time_steps_per_hour`
@@ -289,9 +296,10 @@ struct CoolingLoad
 
     function CoolingLoad(;
         doe_reference_name::String = "",
-        city::String = "",
         blended_doe_reference_names::Array{String, 1} = String[],
         blended_doe_reference_percents::Array{<:Real,1} = Real[],
+        city::String = "",
+        year::Union{Int, Nothing} = doe_reference_name ≠ "" || blended_doe_reference_names ≠ String[] ? 2017 : nothing, # CRB profiles are 2017 by default. If providing load profile, specify year of data.
         annual_tonhour::Union{Real, Nothing} = nothing,
         monthly_tonhour::Array{<:Real,1} = Real[],
         thermal_loads_ton::Array{<:Real,1} = Real[], # Vector of cooling thermal loads [ton] = [short ton hours/hour]. Length must equal 8760 * `Settings.time_steps_per_hour`
@@ -305,6 +313,11 @@ struct CoolingLoad
         existing_chiller_cop::Union{Real, Nothing} = nothing, # Passed from ExistingChiller or set to a default
         existing_chiller_max_thermal_factor_on_peak_load::Union{Real, Nothing}= nothing # Passed from ExistingChiller or set to a default
     )
+
+        if isnothing(year)
+            throw(@error("Must provide the year when using inputs of thermal_loads_ton or per_time_step_fractions_of_electric_load."))
+        end 
+
         # determine the timeseries of loads_kw_thermal
         loads_kw_thermal = nothing
         loads_kw = nothing
@@ -324,8 +337,8 @@ struct CoolingLoad
             if !(length(monthly_fractions_of_electric_load) ≈ 12)
                 throw(@error("Provided cooling monthly_fractions_of_electric_load array does not have 12 values."))
             end
-            timeseries = collect(DateTime(2017,1,1) : Minute(60/time_steps_per_hour) : 
-                                 DateTime(2017,1,1) + Minute(8760*60 - 60/time_steps_per_hour))
+            timeseries = collect(DateTime(year,1,1) : Minute(60/time_steps_per_hour) : 
+                                 DateTime(year,1,1) + Minute(8760*60 - 60/time_steps_per_hour))
             loads_kw = [monthly_fractions_of_electric_load[month(dt)] * site_electric_load_profile[ts] for (ts, dt) 
                         in enumerate(timeseries)]
         
@@ -335,9 +348,9 @@ struct CoolingLoad
         elseif !isempty(doe_reference_name)
             if isnothing(annual_tonhour) && isempty(monthly_tonhour)
                 loads_kw = get_default_fraction_of_total_electric(city, doe_reference_name, 
-                                            latitude, longitude, 2017) .* site_electric_load_profile
+                                            latitude, longitude, year) .* site_electric_load_profile
             else
-                loads_kw = BuiltInCoolingLoad(city, doe_reference_name, latitude, longitude, 2017, 
+                loads_kw = BuiltInCoolingLoad(city, doe_reference_name, latitude, longitude, year, 
                                           annual_tonhour, monthly_tonhour, existing_chiller_cop)
             end
         
@@ -346,7 +359,7 @@ struct CoolingLoad
             if isnothing(annual_tonhour) && isempty(monthly_tonhour)
                 loads_kw = zeros(Int(8760/time_steps_per_hour))
                 for (i, building) in enumerate(blended_doe_reference_names)
-                    default_fraction = get_default_fraction_of_total_electric(city, building, latitude, longitude, 2017)
+                    default_fraction = get_default_fraction_of_total_electric(city, building, latitude, longitude, year)
                     modified_fraction = default_fraction * blended_doe_reference_percents[i]
                     if length(site_electric_load_profile) > 8784
                         modified_fraction = repeat(modified_fraction, inner=time_steps_per_hour / (length(site_electric_load_profile)/8760))
@@ -354,8 +367,8 @@ struct CoolingLoad
                     end
                     loads_kw += site_electric_load_profile .* modified_fraction
                 end
-            else            
-                loads_kw = blend_and_scale_doe_profiles(BuiltInCoolingLoad, latitude, longitude, 2017, 
+            else        
+                loads_kw = blend_and_scale_doe_profiles(BuiltInCoolingLoad, latitude, longitude, year, 
                                                         blended_doe_reference_names, 
                                                         blended_doe_reference_percents, city, 
                                                         annual_tonhour, monthly_tonhour)

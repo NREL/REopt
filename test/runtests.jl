@@ -197,7 +197,7 @@ else  # run HiGHS tests
 
         @testset "Fifteen minute load" begin
             d = JSON.parsefile("scenarios/no_techs.json")
-            d["ElectricLoad"] = Dict("loads_kw" => repeat([1.0], 35040))
+            d["ElectricLoad"] = Dict("loads_kw" => repeat([1.0], 35040), "year" => 2017)
             d["Settings"] = Dict("time_steps_per_hour" => 4)
             model = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
             results = run_reopt(model, d)
@@ -867,6 +867,7 @@ else  # run HiGHS tests
                 data = JSON.parsefile("./scenarios/chp_supplementary_firing.json")
                 data["CHP"]["supplementary_firing_capital_cost_per_kw"] = 10000
                 data["ElectricLoad"]["loads_kw"] = repeat([800.0], 8760)
+                data["ElectricLoad"]["year"] = 2022
                 data["DomesticHotWaterLoad"]["fuel_loads_mmbtu_per_hour"] = repeat([6.0], 8760)
                 data["SpaceHeatingLoad"]["fuel_loads_mmbtu_per_hour"] = repeat([6.0], 8760)
                 #part 1: supplementary firing not used when less efficient than the boiler and expensive 
@@ -1188,7 +1189,7 @@ else  # run HiGHS tests
             m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false, "presolve" => "on"))
             results = run_reopt(m, "./scenarios/outages_gen_pv_stor.json")
             @test results["Outages"]["expected_outage_cost"] ≈ 3.54476923e6 atol=10
-            @test results["Financial"]["lcc"] ≈ 8.6413594727e7 rtol=0.001
+            @test results["Financial"]["lcc"] ≈ 8.63559824639e7 rtol=0.001
 
             # Scenario with generator, PV, wind, electric storage
             m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false, "presolve" => "on"))
@@ -1197,7 +1198,7 @@ else  # run HiGHS tests
             @test value(m[:binMGTechUsed]["PV"]) ≈ 1
             @test value(m[:binMGTechUsed]["Wind"]) ≈ 1
             @test results["Outages"]["expected_outage_cost"] ≈ 1.296319791276051e6 atol=1.0
-            @test results["Financial"]["lcc"] ≈ 4.8046446434e6 rtol=0.001
+            @test results["Financial"]["lcc"] ≈ 4.833635288e6 rtol=0.001
             
         end
 
@@ -1247,6 +1248,7 @@ else  # run HiGHS tests
                 # has a demand charge lookback of 35% for all months with 2 different demand charges based on which month
                 data["ElectricLoad"]["loads_kw"] = ones(8760)
                 data["ElectricLoad"]["loads_kw"][8] = 100.0
+                data["ElectricLoad"]["year"] = 2022
                 inputs = REoptInputs(Scenario(data))        
                 m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
                 results = run_reopt(m, inputs)
@@ -1263,6 +1265,7 @@ else  # run HiGHS tests
                 d["ElectricLoad"]["loads_kw"][2403] = 400 # April peak (Should set dvPeakDemandLookback)
                 d["ElectricLoad"]["loads_kw"][4088] = 500 # June peak (not in peak month lookback)
                 d["ElectricLoad"]["loads_kw"][8333] = 300 # Dec peak 
+                d["ElectricLoad"]["year"] = 2022
                 d["ElectricTariff"]["monthly_demand_rates"] = [10,10,20,50,20,10,20,20,20,20,20,5]
                 d["ElectricTariff"]["demand_lookback_months"] = [1,0,0,1,0,0,0,0,0,0,0,1] # Jan, April, Dec
                 d["ElectricTariff"]["blended_annual_energy_rate"] = 0.01
@@ -1282,7 +1285,8 @@ else  # run HiGHS tests
                 d["ElectricLoad"]["loads_kw"][22] = 200 # Jan peak
                 d["ElectricLoad"]["loads_kw"][2403] = 400 # April peak (Should set dvPeakDemandLookback)
                 d["ElectricLoad"]["loads_kw"][4088] = 500 # June peak (not in peak month lookback)
-                d["ElectricLoad"]["loads_kw"][8333] = 300 # Dec peak 
+                d["ElectricLoad"]["loads_kw"][8333] = 300 # Dec peak
+                d["ElectricLoad"]["year"] = 2022 
                 d["ElectricTariff"]["monthly_demand_rates"] = [10,10,20,50,20,10,20,20,20,20,20,5]
                 d["ElectricTariff"]["blended_annual_energy_rate"] = 0.01
                 d["ElectricTariff"]["demand_lookback_range"] = 6
@@ -1909,6 +1913,7 @@ else  # run HiGHS tests
             post_name = "wind_intl_offgrid.json" 
             post = JSON.parsefile("./scenarios/$post_name")
             post["ElectricLoad"]["loads_kw"] = [10.0 for i in range(1,8760)]
+            post["ElectricLoad"]["year"] = 2022
             scen = Scenario(post)
             post["Wind"]["production_factor_series"] =  reduce(vcat, readdlm("./data/example_wind_prod_factor_kw.csv", '\n', header=true)[1])
 
@@ -2718,7 +2723,74 @@ else  # run HiGHS tests
                 @test results["ASHPSpaceHeater"]["annual_thermal_production_tonhour"] ≈ 876.0 rtol=1e-4
                 @test results["ExistingBoiler"]["annual_thermal_production_mmbtu"] ≈ 0.4 * 8760 rtol=1e-4
             end
-        
+
+            @testset "ASHP Forced Dispatch to Load or Max Capacity" begin
+                d = JSON.parsefile("./scenarios/ashp.json")
+                d["SpaceHeatingLoad"]["annual_mmbtu"] = 0.5 * 8760
+                d["DomesticHotWaterLoad"] = Dict{String,Any}("annual_mmbtu" => 0.5 * 8760, "doe_reference_name" => "FlatLoad")
+                d["CoolingLoad"] = Dict{String,Any}("thermal_loads_ton" => ones(8760)*0.1)
+                d["ExistingChiller"] = Dict{String,Any}("retire_in_optimal" => false, "cop" => 100)
+                d["ExistingBoiler"]["retire_in_optimal"] = false
+                d["ExistingBoiler"]["fuel_cost_per_mmbtu"] = 0.001
+                d["ASHPSpaceHeater"]["can_serve_cooling"] = true
+                d["ASHPSpaceHeater"]["force_dispatch"] = true
+                d["ASHPSpaceHeater"]["min_ton"] = 1000
+                d["ASHPSpaceHeater"]["max_ton"] = 1000      
+                
+                s = Scenario(d)
+                p = REoptInputs(s)
+                m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+                results = run_reopt(m, p)
+            
+                #Case 1: ASHP systems run to meet full site load as they are oversized and dispatch is forced
+                @test results["ASHPSpaceHeater"]["annual_electric_consumption_kwh"] ≈ sum(0.4 * REopt.KWH_PER_MMBTU / p.heating_cop["ASHPSpaceHeater"][ts] + 0.1 * REopt.KWH_THERMAL_PER_TONHOUR / p.cooling_cop["ASHPSpaceHeater"][ts] for ts in p.time_steps) rtol=1e-4
+                # This confirms that ASHPSpaceHeater is forced to dispatch to cooling load because the default ExistingChiller.cop is greater than the defaul ASHP cooling COP
+                @test results["ASHPSpaceHeater"]["annual_thermal_production_tonhour"] ≈ 0.1 * 8760 rtol=1e-4
+                @test results["ASHPSpaceHeater"]["annual_thermal_production_mmbtu"] ≈ 0.4 * 8760 rtol=1e-4            
+                
+                d["ASHPSpaceHeater"]["can_serve_cooling"] = false
+                d["ASHPSpaceHeater"]["min_ton"] = 10
+                d["ASHPSpaceHeater"]["max_ton"] = 10
+                d["ASHPSpaceHeater"]["min_allowable_ton"] = 0
+                d["ASHPWaterHeater"] = Dict{String,Any}("force_dispatch" => true, "min_allowable_ton" => 0.0, "min_ton" => 10, "max_ton" => 10)
+            
+                s = Scenario(d)
+                p = REoptInputs(s)
+                m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+                results = run_reopt(m, p)
+            
+                #Case 2: ASHP systems run to meet at capacity as they are undersized and dispatch is forced, Space Heater is heat only
+                @test results["ASHPSpaceHeater"]["annual_electric_consumption_kwh"] ≈ sum(10 * REopt.KWH_THERMAL_PER_TONHOUR * p.heating_cf["ASHPSpaceHeater"][ts] / p.heating_cop["ASHPSpaceHeater"][ts] for ts in p.time_steps) rtol=1e-4
+                @test results["ASHPSpaceHeater"]["annual_thermal_production_mmbtu"] ≈ sum(10 * (REopt.KWH_THERMAL_PER_TONHOUR/REopt.KWH_PER_MMBTU) * p.heating_cf["ASHPSpaceHeater"][ts] for ts in p.time_steps) rtol=1e-4
+                @test results["ASHPWaterHeater"]["annual_electric_consumption_kwh"] ≈ sum(10 * REopt.KWH_THERMAL_PER_TONHOUR * p.heating_cf["ASHPWaterHeater"][ts] / p.heating_cop["ASHPWaterHeater"][ts] for ts in p.time_steps) rtol=1e-4
+                @test results["ASHPWaterHeater"]["annual_thermal_production_mmbtu"] ≈ sum(10 * (REopt.KWH_THERMAL_PER_TONHOUR/REopt.KWH_PER_MMBTU) * p.heating_cf["ASHPWaterHeater"][ts] for ts in p.time_steps) rtol=1e-4
+            
+                d["ASHPSpaceHeater"]["force_dispatch"] = false
+                d["ASHPWaterHeater"]["force_dispatch"] = false
+            
+                s = Scenario(d)
+                p = REoptInputs(s)
+                m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+                results = run_reopt(m, p)
+            
+                #Case 3: ASHP present but does not run because dispatch is not forced and boiler fuel is cheap
+                @test results["ASHPSpaceHeater"]["annual_electric_consumption_kwh"] ≈ 0.0 atol=1e-4
+                @test results["ASHPSpaceHeater"]["annual_thermal_production_mmbtu"] ≈ 0.0 atol=1e-4
+                @test results["ASHPWaterHeater"]["annual_electric_consumption_kwh"] ≈ 0.0 atol=1e-4
+                @test results["ASHPWaterHeater"]["annual_thermal_production_mmbtu"] ≈ 0.0 atol=1e-4
+            
+                #Case 4: confirm that when force_dispatch == true, there is no ASHP system purchased when system is expensive compared to cost of fuel
+                d["ASHPSpaceHeater"]["force_dispatch"] = true
+                d["ASHPWaterHeater"]["force_dispatch"] = true
+                d["ASHPSpaceHeater"]["min_ton"] = 0.0
+                d["ASHPWaterHeater"]["min_ton"] = 0.0
+                s = Scenario(d)
+                p = REoptInputs(s)
+                m = Model(optimizer_with_attributes(HiGHS.Optimizer, "output_flag" => false, "log_to_console" => false))
+                results = run_reopt(m, p)
+                @test results["ASHPSpaceHeater"]["size_ton"] ≈ 0.0 atol=1e-4
+                @test results["ASHPWaterHeater"]["size_ton"] ≈ 0.0 atol=1e-4
+            end
         end
 
         @testset "Process Heat Load" begin
@@ -2941,8 +3013,8 @@ else  # run HiGHS tests
             # Check that monthly energy input is preserved when normalizing and scaling the hourly profile
             @test abs(sum(s.electric_load.loads_kw) - sum(input_data["ElectricLoad"]["monthly_totals_kwh"])) < 1.0
 
-            # This get_monthly_energy function is only equivalent for non-leap years with loads_kw normalization and scaling because it removes the leap day from the processing of monthly hours/energy
-            monthly_totals_kwh = REopt.get_monthly_energy(s.electric_load.loads_kw; year=2017)
+            # Check consistency of get_monthly_energy() function which is used in simulated_load()
+            monthly_totals_kwh = REopt.get_monthly_energy(s.electric_load.loads_kw; year=input_data["ElectricLoad"]["year"])
 
             # Check that each month matches
             @test sum(monthly_totals_kwh .- input_data["ElectricLoad"]["monthly_totals_kwh"]) < 1.0
@@ -2990,14 +3062,13 @@ else  # run HiGHS tests
 
             # Check that monthly energy input is preserved when normalizing and scaling the hourly profile
             @test abs(sum(s.space_heating_load.loads_kw / s.existing_boiler.efficiency / REopt.KWH_PER_MMBTU) - sum(input_data["SpaceHeatingLoad"]["monthly_mmbtu"]) * address_frac) < 1.0
-
-            # This get_monthly_energy function is only equivalent for non-leap years with loads_kw normalization and scaling because it removes the leap day from the processing of monthly hours/energy
-            monthly_kwht = REopt.get_monthly_energy(s.space_heating_load.loads_kw; year=2017) 
+            # Check consistency of get_monthly_energy() function which is used in simulated_load()
+            monthly_kwht = REopt.get_monthly_energy(s.space_heating_load.loads_kw; year=input_data["SpaceHeatingLoad"]["year"]) 
             monthly_mmbtu = monthly_kwht/ s.existing_boiler.efficiency / REopt.KWH_PER_MMBTU
-            @test abs(sum(s.process_heat_load.loads_kw / s.existing_boiler.efficiency / REopt.KWH_PER_MMBTU) - input_data["ProcessHeatLoad"]["annual_mmbtu"]) < 1.0
-
-            # Check that each month matches
             @test sum(monthly_mmbtu .- input_data["SpaceHeatingLoad"]["monthly_mmbtu"] * address_frac) < 1.0
+
+            # Check that annual energy input is preserved when normalizing and scaling the hourly profile
+            @test abs(sum(s.process_heat_load.loads_kw / s.existing_boiler.efficiency / REopt.KWH_PER_MMBTU) - input_data["ProcessHeatLoad"]["annual_mmbtu"]) < 1.0
 
             # Check that the load ratio within a month is proportional to the loads_kw ratio
             @test abs(s.space_heating_load.loads_kw[6] / s.space_heating_load.loads_kw[4] - input_data["SpaceHeatingLoad"]["fuel_loads_mmbtu_per_hour"][6] / input_data["SpaceHeatingLoad"]["fuel_loads_mmbtu_per_hour"][4]) < 0.001
@@ -3045,5 +3116,136 @@ else  # run HiGHS tests
             @test r["ElectricStorage"]["size_kw"]*8 - r["ElectricStorage"]["size_kwh"] ≈ 0.0 atol = 0.1
 
         end
+
+        @testset "Test leap year for URDB demand and energy charges" begin
+            """
+            We tell users to truncate/cut-off the last day of the year of their load profile for leap years, to 
+                preserve the weekday/weekend and month alignment of the load with the rate structure
+
+            The input .json file has a custom rate tariff to test leap year behavior for timesteps beyond end of February
+                Higher energy price weekdays between 7AM (ts 8, 32, etc) through 7pm (ts 20, 44, etc)
+                Flat/Facility (non-TOU) demand charges of 18.05/kW all month
+                TOU demand charges of 10/kW between 2pm-7pm on weekdays
+            """
+            input_data = JSON.parsefile("scenarios/leap_year.json")
+            # Set the load profile to zeros except for certain timesteps to test alignment of load with rate structure
+            peak_load = 10.0
+            for year in [2023, 2024]
+                input_data["ElectricLoad"]["year"] = year
+                
+                # Test for TOU energy and demand charges alignment with load profile for leap years
+                input_data["ElectricLoad"]["loads_kw"] = zeros(8760)
+                # Sunday (off-peak) March 3, 2023, so expect off-peak energy and demand charges for 2023
+                # Monday (on-peak) March 4, 2024, but Sunday (weekend, off-peak) if February handled as 28 days for leap year (as it was in REopt prior to 2025)
+                input_data["ElectricLoad"]["loads_kw"][31*24+29*24+3*24+16] = peak_load
+                s = Scenario(input_data)
+                inputs = REoptInputs(s)
+                m = Model(optimizer_with_attributes(HiGHS.Optimizer, "mip_rel_gap" => 0.01, "output_flag" => false, "log_to_console" => false))
+                results = run_reopt(m, inputs)
+
+                # TOU Energy charges
+                weekend_rate = input_data["ElectricTariff"]["urdb_response"]["energyratestructure"][2][1]["rate"]  # Not used in this test
+                weekday_rate = input_data["ElectricTariff"]["urdb_response"]["energyratestructure"][3][1]["rate"]
+
+                # TOU Demand charges
+                flat_rate = input_data["ElectricTariff"]["urdb_response"]["flatdemandstructure"][3][1]["rate"]
+                tou_rate = input_data["ElectricTariff"]["urdb_response"]["demandratestructure"][3][1]["rate"]
+
+                energy_charge_expected = 0.0
+                demand_charge_expected = 0.0
+                if year == 2023
+                    energy_charge_expected = weekend_rate * peak_load
+                    demand_charge_expected = flat_rate * peak_load
+                elseif year == 2024  # Leap year
+                    energy_charge_expected = weekday_rate * peak_load
+                    demand_charge_expected = (flat_rate + tou_rate) * peak_load        
+                end
+                @test results["ElectricTariff"]["year_one_energy_cost_before_tax"] ≈ energy_charge_expected atol=1E-6
+                @test results["ElectricTariff"]["year_one_demand_cost_before_tax"] ≈ demand_charge_expected atol=1E-6
+
+                # Flat/facility (non-TOU) demand charge
+                input_data["ElectricLoad"]["loads_kw"] = zeros(8760)
+                # Weekday off-peak February 28th, to set February Facility demand charge
+                input_data["ElectricLoad"]["loads_kw"][31*24+27*24+8] = peak_load
+                # Weekday off-peak Feb 29th for leap year, March 1st for non-leap year (also if Feb is wrongly handled as 28 days for leap year)
+                input_data["ElectricLoad"]["loads_kw"][31*24+28*24+8] = peak_load
+                s = Scenario(input_data)
+                inputs = REoptInputs(s)
+                m = Model(optimizer_with_attributes(HiGHS.Optimizer, "mip_rel_gap" => 0.01, "output_flag" => false, "log_to_console" => false))
+                results = run_reopt(m, inputs)
+                flat_rate = input_data["ElectricTariff"]["urdb_response"]["flatdemandstructure"][3][1]["rate"]
+                if year == 2024  # Leap year
+                    demand_charge_expected = flat_rate * peak_load
+                elseif year == 2023
+                    demand_charge_expected = 2 * flat_rate * peak_load
+                end
+                @test results["ElectricTariff"]["year_one_demand_cost_before_tax"] ≈ demand_charge_expected atol=1E-6
+            end
+        end
+
+        @testset "Align load profiles based on load year" begin
+            """
+            Common use case: ElectricLoad.loads_kw is input with specific year, but heating and/or cooling is 
+                simulated with either a schedule-based FlatLoad, or b) CRB type with annual or monthly energy
+            This test confirms that the simulated FlatLoad type and CRB are shifted to start on Monday for 2024
+            """
+        
+            input_data = JSON.parsefile("./scenarios/load_year_align.json")
+            year = 2024
+            # ElectricLoad.loads_kw is 2024, and heating and cooling loads are shifted to align
+            # Use a FlatLoad_16_5 shifted to 2024 (Monday start) with the web tool's custom load builder
+            loads_kw = readdlm("./data/10 kW FlatLoad_16_5 2024.csv", ',', Float64, header=true)[1][:, 2]
+            input_data["ElectricLoad"] = Dict("loads_kw" => loads_kw, "year" => year)
+        
+            s = Scenario(input_data)
+            inputs = REoptInputs(s)
+            m = Model(optimizer_with_attributes(HiGHS.Optimizer, "mip_rel_gap" => 0.01, "output_flag" => false, "log_to_console" => false))
+            results = run_reopt(m, inputs)
+        
+            electric_load = results["ElectricLoad"]["load_series_kw"]
+            heating_load = results["HeatingLoad"]["space_heating_boiler_fuel_load_series_mmbtu_per_hour"]
+            cooling_load = results["CoolingLoad"]["load_series_ton"]
+        
+            count_misaligned_heating = sum((electric_load .> 0) .& (heating_load .== 0))
+            count_misaligned_cooling = sum((electric_load .> 0) .& (cooling_load .== 0))
+        
+            @test count_misaligned_heating == 0
+            @test count_misaligned_cooling == 0
+        
+            # Simulated load with year input (e.g. when user inputs custom electric load profile but wants to see aligned simulated heating load)
+            d_sim_load = Dict([("latitude", input_data["Site"]["latitude"]),
+                                ("longitude", input_data["Site"]["longitude"]),
+                                ("load_type", "space_heating"),  # since annual_tonhour is not given
+                                ("doe_reference_name", "FlatLoad_16_5"),
+                                ("annual_mmbtu", input_data["SpaceHeatingLoad"]["annual_mmbtu"]),
+                                ("year", year)
+                                ])
+        
+            sim_load_response = simulated_load(d_sim_load)
+        
+            @test sim_load_response["loads_mmbtu_per_hour"] ≈ round.(heating_load, digits=3)
+        
+            # If a non-2017 year is input with a CRB for electric, heating, or cooling load, make sure that 
+            #  the energy input is preserved while the CRB profile is shifted and adjusted to align with 
+            #  the load year and re-normalized to preserve the annual energy (sum of normalized profile == 1.0)
+            buildingtype = "Hospital"
+            input_data["ElectricLoad"] = Dict("doe_reference_name" => buildingtype, "annual_kwh" => 10000, "year" => year)
+            input_data["SpaceHeatingLoad"] = Dict("doe_reference_name" => buildingtype, "annual_mmbtu" => 10000)
+            input_data["CoolingLoad"] = Dict("doe_reference_name" => buildingtype, "annual_tonhour" => 100.0)
+
+            s = Scenario(input_data)
+            inputs = REoptInputs(s)
+
+            # Test that the energy input is preserved with the CRB profile shift
+            @test sum(s.electric_load.loads_kw) ≈ input_data["ElectricLoad"]["annual_kwh"]
+            @test sum(s.space_heating_load.loads_kw) / REopt.KWH_PER_MMBTU ≈ input_data["SpaceHeatingLoad"]["annual_mmbtu"]
+            @test sum(s.cooling_load.loads_kw_thermal) / REopt.KWH_THERMAL_PER_TONHOUR ≈ input_data["CoolingLoad"]["annual_tonhour"]
+
+            # The first CRB profile day, Sunday, is replaced by the first day of the load year, and that day is replicated at the end of the year too
+            @test s.electric_load.loads_kw[end-24+1:end] == s.electric_load.loads_kw[1:24]
+            @test s.space_heating_load.loads_kw[end-24+1:end] == s.space_heating_load.loads_kw[1:24]
+            @test s.cooling_load.loads_kw_thermal[end-24+1:end] == s.cooling_load.loads_kw_thermal[1:24]
+        end
+        
     end
 end

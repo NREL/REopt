@@ -221,14 +221,13 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
     if haskey(d, "DomesticHotWaterLoad") && !haskey(d, "FlexibleHVAC")
         add_doe_reference_names_from_elec_to_thermal_loads(d["ElectricLoad"], d["DomesticHotWaterLoad"])
         existing_boiler_efficiency = get_existing_boiler_efficiency(d)
-        year = get(d["DomesticHotWaterLoad"], "year", electric_load.year)
+        year = get!(d["DomesticHotWaterLoad"], "year", electric_load.year)
         validate_load_year_consistency(electric_load.year, year, "DomesticHotWaterLoad")
         dhw_load = HeatingLoad(; dictkeys_tosymbols(d["DomesticHotWaterLoad"])...,
                                         load_type = "domestic_hot_water",
                                         latitude=site.latitude, longitude=site.longitude, 
                                         time_steps_per_hour=settings.time_steps_per_hour,
-                                        existing_boiler_efficiency = existing_boiler_efficiency,
-                                        year = year
+                                        existing_boiler_efficiency = existing_boiler_efficiency
                                         )
         max_heat_demand_kw = maximum(dhw_load.loads_kw)
     else
@@ -236,21 +235,21 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
             load_type = "domestic_hot_water", 
             fuel_loads_mmbtu_per_hour=zeros(8760*settings.time_steps_per_hour),
             time_steps_per_hour=settings.time_steps_per_hour,
-            existing_boiler_efficiency = EXISTING_BOILER_EFFICIENCY
+            existing_boiler_efficiency = EXISTING_BOILER_EFFICIENCY,
+            year=electric_load.year
         )
     end
 
     if haskey(d, "SpaceHeatingLoad") && !haskey(d, "FlexibleHVAC")
         add_doe_reference_names_from_elec_to_thermal_loads(d["ElectricLoad"], d["SpaceHeatingLoad"])
         existing_boiler_efficiency = get_existing_boiler_efficiency(d)
-        year = get(d["SpaceHeatingLoad"], "year", electric_load.year)
+        year = get!(d["SpaceHeatingLoad"], "year", electric_load.year)
         validate_load_year_consistency(electric_load.year, year, "SpaceHeatingLoad")
         space_heating_load = HeatingLoad(; dictkeys_tosymbols(d["SpaceHeatingLoad"])...,
                                             load_type = "space_heating",
                                             latitude=site.latitude, longitude=site.longitude, 
                                             time_steps_per_hour=settings.time_steps_per_hour,
-                                            existing_boiler_efficiency = existing_boiler_efficiency,
-                                            year = year
+                                            existing_boiler_efficiency = existing_boiler_efficiency
                                             )
         max_heat_demand_kw = maximum(space_heating_load.loads_kw .+ max_heat_demand_kw)
     else
@@ -258,20 +257,20 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
             load_type = "space_heating",        
             fuel_loads_mmbtu_per_hour=zeros(8760*settings.time_steps_per_hour),
             time_steps_per_hour=settings.time_steps_per_hour,
-            existing_boiler_efficiency = EXISTING_BOILER_EFFICIENCY
+            existing_boiler_efficiency = EXISTING_BOILER_EFFICIENCY,
+            year=electric_load.year
         )
     end
 
     if haskey(d, "ProcessHeatLoad") && !haskey(d, "FlexibleHVAC")
         existing_boiler_efficiency = get_existing_boiler_efficiency(d)
-        year = get(d["ProcessHeatLoad"], "year", electric_load.year)
+        year = get!(d["ProcessHeatLoad"], "year", electric_load.year)
         validate_load_year_consistency(electric_load.year, year, "ProcessHeatLoad")
         process_heat_load = HeatingLoad(; dictkeys_tosymbols(d["ProcessHeatLoad"])...,
                                             load_type = "process_heat",
                                             latitude = site.latitude, longitude = site.longitude, 
                                             time_steps_per_hour = settings.time_steps_per_hour,
-                                            existing_boiler_efficiency = existing_boiler_efficiency,
-                                            year = year                                            
+                                            existing_boiler_efficiency = existing_boiler_efficiency                                           
                                             )
                                     
         max_heat_demand_kw = maximum(process_heat_load.loads_kw .+ max_heat_demand_kw)
@@ -280,7 +279,8 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
                 load_type = "process_heat",                
                 fuel_loads_mmbtu_per_hour=zeros(8760*settings.time_steps_per_hour),
                 time_steps_per_hour=settings.time_steps_per_hour,
-                existing_boiler_efficiency = EXISTING_BOILER_EFFICIENCY
+                existing_boiler_efficiency = EXISTING_BOILER_EFFICIENCY,
+                year=electric_load.year
         )
     end
 
@@ -418,6 +418,8 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
                 d["CoolingLoad"]["existing_chiller_max_thermal_factor_on_peak_load"] = ec_empty.max_thermal_factor_on_peak_load
             end
         end
+        year = get!(d["CoolingLoad"], "year", electric_load.year)
+        validate_load_year_consistency(electric_load.year, year, "CoolingLoad")
         cooling_load = CoolingLoad(; dictkeys_tosymbols(d["CoolingLoad"])...,
                                     latitude=site.latitude, longitude=site.longitude, 
                                     time_steps_per_hour=settings.time_steps_per_hour
@@ -439,7 +441,8 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
     else
         cooling_load = CoolingLoad(; 
             thermal_loads_ton=zeros(8760*settings.time_steps_per_hour),
-            time_steps_per_hour=settings.time_steps_per_hour
+            time_steps_per_hour=settings.time_steps_per_hour,
+            year=electric_load.year
         )
     end
 
@@ -826,6 +829,6 @@ end
 
 function validate_load_year_consistency(electric_load_year, year, load_type)
     if electric_load_year != year
-        @warn "Inconsistent load years: ElectricLoad year ($electric_load_year) does not match the provided year ($year) for $load_type."
+        throw(@error("Inconsistent load years: ElectricLoad year ($electric_load_year) does not match the provided year ($year) for $load_type."))
     end
 end

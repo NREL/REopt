@@ -224,7 +224,7 @@ function parse_urdb_energy_costs(d::Dict, year::Int; time_steps_per_hour=1, bigM
             end
 
             n_days = daysinmonth(Date(string(year) * "-" * string(month)))
-            if month == 2 && isleapyear(year)
+            if month == 12 && isleapyear(year)
                 n_days -= 1
             end
 
@@ -408,11 +408,11 @@ return Array{Int, 1} for time_steps in ratchet (aka period)
 function get_tou_demand_steps(d::Dict; year::Int, month::Int, period::Int, time_steps_per_hour=1)
     if month > 1
         plus_days = 0
+        if month == 12 && isleapyear(year)
+            plus_days -= 1
+        end
         for m in range(1, stop=month-1)
             plus_days += daysinmonth(Date(string(year) * "-" * string(m)))
-            if m == 2 && isleapyear(year)
-                plus_days -= 1
-            end
         end
         start_hour = 1 + plus_days * 24
         start_step = 1 + plus_days * 24 * time_steps_per_hour
