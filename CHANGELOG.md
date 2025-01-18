@@ -27,7 +27,7 @@ Classify the change according to the following categories:
 
 ## max-ashp-dispatch
 ### Added
-- New parameter `force_dispatch` in the **ASHPSpaceHeater** and **ASHPWaterHeater** technologies (default = `false`).  When set to `true`, the ASHP's thermal output will be the minimum of the site load(s) served and the system size (adjusted for timestep-specific capacity factor) in each period.
+- New parameter `force_dispatch` in the **ASHPSpaceHeater** and **ASHPWaterHeater** technologies (default = `true`).  When set/kept to `true`, the ASHP's thermal output will be the minimum of the site load(s) served and the system size (adjusted for timestep-specific capacity factor) in each period.
 
 ## load-year-align
 ### Fixed
