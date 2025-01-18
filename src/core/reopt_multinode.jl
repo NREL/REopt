@@ -86,6 +86,12 @@ function add_variables!(m::JuMP.AbstractModel, ps::AbstractVector{REoptInputs{T}
 		m[Symbol(ex_name)] = 0
 	
 		add_elec_utility_expressions(m, p; _n=_n)
+
+		# Existing HVAC Cost NOT hooked up for multi-node; this is a patch to avoid errors
+		ex_name = "ExistingBoilerCost"*_n
+		m[Symbol(ex_name)] = 0
+		ex_name = "ExistingChillerCost"*_n
+		m[Symbol(ex_name)] = 0
 	
 		#################################  Objective Function   ########################################
 		m[Symbol("Costs"*_n)] = @expression(m,

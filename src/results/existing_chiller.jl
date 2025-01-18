@@ -11,6 +11,8 @@
 function add_existing_chiller_results(m::JuMP.AbstractModel, p::REoptInputs, d::Dict; _n="")
     r = Dict{String, Any}()
 
+	r["size_ton"] = round(value(m[Symbol("dvSize"*_n)]["ExistingChiller"]) * p.s.existing_chiller.max_thermal_factor_on_peak_load / KWH_THERMAL_PER_TONHOUR, digits=3)
+
 	@expression(m, ELECCHLtoTES[ts in p.time_steps],
 		sum(m[:dvProductionToStorage][b,"ExistingChiller",ts] for b in p.s.storage.types.cold)
     )

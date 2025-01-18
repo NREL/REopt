@@ -216,7 +216,7 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
         generator = Generator(; max_kw=0)
     end
 
-    max_heat_demand_kw = 0.0
+    total_heating_load_series_kw = zeros(8760 * settings.time_steps_per_hour)
 
     if haskey(d, "DomesticHotWaterLoad") && !haskey(d, "FlexibleHVAC")
         add_doe_reference_names_from_elec_to_thermal_loads(d["ElectricLoad"], d["DomesticHotWaterLoad"])
@@ -229,7 +229,7 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
                                         time_steps_per_hour=settings.time_steps_per_hour,
                                         existing_boiler_efficiency = existing_boiler_efficiency
                                         )
-        max_heat_demand_kw = maximum(dhw_load.loads_kw)
+        total_heating_load_series_kw .+= dhw_load.loads_kw
     else
         dhw_load = HeatingLoad(;
             load_type = "domestic_hot_water", 
@@ -251,7 +251,7 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
                                             time_steps_per_hour=settings.time_steps_per_hour,
                                             existing_boiler_efficiency = existing_boiler_efficiency
                                             )
-        max_heat_demand_kw = maximum(space_heating_load.loads_kw .+ max_heat_demand_kw)
+        total_heating_load_series_kw .+= space_heating_load.loads_kw
     else
         space_heating_load = HeatingLoad(; 
             load_type = "space_heating",        
@@ -273,7 +273,7 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
                                             existing_boiler_efficiency = existing_boiler_efficiency                                           
                                             )
                                     
-        max_heat_demand_kw = maximum(process_heat_load.loads_kw .+ max_heat_demand_kw)
+        total_heating_load_series_kw .+= process_heat_load.loads_kw
     else
         process_heat_load = HeatingLoad(;
                 load_type = "process_heat",                
@@ -356,6 +356,7 @@ function Scenario(d::Dict; flex_hvac_from_json=false)
         end
     end
 
+    max_heat_demand_kw = maximum(total_heating_load_series_kw)
     if max_heat_demand_kw > 0 && !haskey(d, "FlexibleHVAC")  # create ExistingBoiler
         boiler_inputs = Dict{Symbol, Any}()
         boiler_inputs[:max_heat_demand_kw] = max_heat_demand_kw

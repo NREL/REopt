@@ -251,6 +251,7 @@ function proforma_results(p::REoptInputs, d::Dict)
     free_cashflow_without_year_zero = m.total_depreciation * tax_rate_fraction + total_cash_incentives + operating_expenses_after_tax
     free_cashflow_without_year_zero[1] += m.federal_itc
     r["initial_capital_costs_after_incentives_without_macrs"] = d["Financial"]["initial_capital_costs"] - m.total_ibi_and_cbi - m.federal_itc
+    # Note, free_cashflow_bau[1] (below) now has possible non-zero costs from ExistingBoiler/Chiller
     free_cashflow = append!([(-1 * d["Financial"]["initial_capital_costs"]) + m.total_ibi_and_cbi], free_cashflow_without_year_zero)
 
     # At this point the logic branches based on third-party ownership or not - see comments    
@@ -305,7 +306,8 @@ function proforma_results(p::REoptInputs, d::Dict)
         operating_expenses_after_tax_bau = total_operating_expenses_bau - deductable_operating_expenses_series_bau + 
                     deductable_operating_expenses_series_bau * (1 - p.s.financial.offtaker_tax_rate_fraction)
         free_cashflow_bau = operating_expenses_after_tax_bau + total_cash_incentives_bau
-        free_cashflow_bau = append!([0.0], free_cashflow_bau)
+        lifecycle_capital_costs_bau = get(d["Financial"], "lifecycle_capital_costs_bau", 0.0)
+        free_cashflow_bau = append!([-1 * lifecycle_capital_costs_bau], free_cashflow_bau)
         r["offtaker_annual_free_cashflows"] = round.(free_cashflow, digits=2)
         r["offtaker_discounted_annual_free_cashflows"] = [round(
             v / ((1 + p.s.financial.offtaker_discount_rate_fraction)^(yr-1)), 

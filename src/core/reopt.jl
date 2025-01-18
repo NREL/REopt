@@ -266,6 +266,8 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 	m[:AvoidedCapexByASHP] = 0.0
 	m[:ResidualGHXCapCost] = 0.0
 	m[:ObjectivePenalties] = 0.0
+	m[:ExistingBoilerCost] = 0.0
+	m[:ExistingChillerCost] = 0.0
 
 	if !isempty(p.techs.all) || !isempty(p.techs.ghp)
 		if !isempty(p.techs.all)
@@ -309,10 +311,16 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
             add_boiler_tech_constraints(m, p)
 			m[:TotalPerUnitProdOMCosts] += m[:TotalBoilerPerUnitProdOMCosts]
 			m[:TotalFuelCosts] += m[:TotalBoilerFuelCosts]
+			if ("ExistingBoiler" in p.techs.boiler) && (p.s.existing_boiler.installed_cost_dollars > 0.0)
+				add_existing_boiler_capex_constraints(m, p)
+			end			
         end
 
 		if !isempty(p.techs.cooling)
             add_cooling_tech_constraints(m, p)
+			if ("ExistingChiller" in p.techs.cooling) && (p.s.existing_chiller.installed_cost_dollars > 0.0)
+				add_existing_chiller_capex_constraints(m, p)
+			end
         end
 
 		# Zero out ExistingChiller production if retire_in_optimal; setdiff avoids zeroing for BAU 
@@ -546,6 +554,14 @@ function build_reopt!(m::JuMP.AbstractModel, p::REoptInputs)
 	if !isempty(p.s.electric_utility.outage_durations)
 		m[:ObjectivePenalties] += sum(sum(0.0001 * m[:dvUnservedLoad][s, tz, ts] for ts in 1:p.s.electric_utility.outage_durations[s]) 
 			for s in p.s.electric_utility.scenarios, tz in p.s.electric_utility.outage_start_time_steps)
+	end
+
+	if "ExistingBoiler" in p.techs.all && (p.s.existing_boiler.installed_cost_dollars > 0.0)
+		add_to_expression!(Costs, m[:ExistingBoilerCost])
+	end
+
+	if "ExistingChiller" in p.techs.all && (p.s.existing_chiller.installed_cost_dollars > 0.0)
+		add_to_expression!(Costs, m[:ExistingChillerCost])
 	end
 
 	# Set model objective 

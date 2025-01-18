@@ -3246,6 +3246,48 @@ else  # run HiGHS tests
             @test s.space_heating_load.loads_kw[end-24+1:end] == s.space_heating_load.loads_kw[1:24]
             @test s.cooling_load.loads_kw_thermal[end-24+1:end] == s.cooling_load.loads_kw_thermal[1:24]
         end
+
+        @testset "Existing HVAC (Boiler and Chiller) Costs for BAU" begin
+            """
+            Test that the existing HVAC (ExistingBoiler and ExistingChiller) costs are calculated correctly in BAU and optimal scenarios
+            """
+            # GHP is not allowed to serve DHW in this scenario, so there is still expected to be "ExistingBoiler" cost in optimal case
+            input_data = JSON.parsefile("./scenarios/hvac_costs.json")
+            # Choose one or the other to be non-zero
+            # This test will check that with GHP, we just have the ExistingBoiler cost based on the size to serve the DHW load
+            input_data["ExistingBoiler"]["installed_cost_dollars"] = 0.0 #100000.0
+            input_data["ExistingBoiler"]["installed_cost_per_mmbtu_per_hour"] = 100000.0
+            # Choose one or the other to be non-zero
+            # This test will make sure GHP is serving ALL the cooling load so that it does not incur this binary cost
+            input_data["ExistingChiller"]["installed_cost_dollars"] = 50000.0
+            input_data["ExistingChiller"]["installed_cost_per_ton"] = 0.0
+
+            # Avoid calling GhpGhx.jl for speed testing, once we have a consistent ghpghx_response relative to the heating and cooling loads
+            response_1 = JSON.parsefile("./scenarios/ghpghx_response_existing.json")
+            input_data["GHP"]["ghpghx_responses"] = [response_1]
+
+            s = Scenario(input_data)
+            inputs = REoptInputs(s)
+            m1 = Model(optimizer_with_attributes(HiGHS.Optimizer, "mip_rel_gap" => 0.01, "output_flag" => false, "log_to_console" => false))
+            m2 = Model(optimizer_with_attributes(HiGHS.Optimizer, "mip_rel_gap" => 0.01, "output_flag" => false, "log_to_console" => false))
+            results = run_reopt([m1,m2], inputs)
+
+            # Heating CapEx with "per_mmbtu_per_hour" cost input
+            max_thermal_mmbtu_per_hour = maximum(s.space_heating_load.loads_kw .+ s.dhw_load.loads_kw) / REopt.KWH_PER_MMBTU
+            # Expected capex below assumes that both of these inputs may be included but one has to be zero (will error if not)
+            expected_capex_bau = 1.25 * max_thermal_mmbtu_per_hour * input_data["ExistingBoiler"]["installed_cost_per_mmbtu_per_hour"] + input_data["ExistingBoiler"]["installed_cost_dollars"]
+
+            # Cooling CapEx with "_dollars" cost input
+            max_cooling_ton = maximum(s.cooling_load.loads_kw_thermal) / REopt.KWH_THERMAL_PER_TONHOUR
+            expected_capex_bau += 1.25 * max_cooling_ton * input_data["ExistingChiller"]["installed_cost_per_ton"] + input_data["ExistingChiller"]["installed_cost_dollars"]
+
+            # Expected optimal case ExistingBoiler + ExistingChiller cost - just the ExistingBoiler to serve DHW
+            max_dhw_thermal_mmbtu_per_hour = maximum(s.dhw_load.loads_kw) / REopt.KWH_PER_MMBTU
+            # Expected capex below assumes that both of these inputs may be included but one has to be zero (will error if not)
+            expected_capex_opt = 1.25 * max_dhw_thermal_mmbtu_per_hour * input_data["ExistingBoiler"]["installed_cost_per_mmbtu_per_hour"] + input_data["ExistingBoiler"]["installed_cost_dollars"]
         
+            @test round(results["Financial"]["lifecycle_capital_costs_bau"], digits=0) ≈ round(expected_capex_bau, digits=0)
+            @test round(results["Financial"]["lifecycle_capital_costs"], digits=0) ≈ round(expected_capex_opt, digits=0)
+        end
     end
 end

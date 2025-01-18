@@ -41,3 +41,35 @@ function add_no_curtail_constraints(m, p; _n="")
         end
     end
 end
+
+function add_existing_boiler_capex_constraints(m, p; _n="")
+    # @variable(m, binExistingBoiler, Int, lower_bound = 0, upper_bound = 1)  # This is same as below with Bin
+    @variable(m, binExistingBoiler, Bin)
+    # If still using ExistingBoiler in optimal case at all, incur costs (not scaled by size)
+    # Force dvSize["ExistingBoiler] to zero if binExistingBoiler is zero:
+    @constraint(m, ExistingBoilerCostCon, m[Symbol("dvSize"*_n)]["ExistingBoiler"] <= m[Symbol("binExistingBoiler"*_n)] * BIG_NUMBER)
+
+    if p.s.existing_boiler.retire_in_optimal
+        @constraint(m, ExistingBoilerSelect, m[Symbol("binExistingBoiler"*_n)] == 0)
+    else
+        @constraint(m, ExistingBoilerSelect, m[Symbol("binExistingBoiler"*_n)] <= 1)
+    end
+
+    m[:ExistingBoilerCost] = @expression(m, p.third_party_factor *
+        sum(p.s.existing_boiler.installed_cost_dollars * m[Symbol("binExistingBoiler"*_n)])
+    )
+end
+
+function add_existing_chiller_capex_constraints(m, p; _n="")
+    # @variable(m, binExistingChiller, Int, lower_bound = 0, upper_bound = 1)  # This is same as below with Bin
+    @variable(m, binExistingChiller, Bin)
+    # If still using ExistingChiller in optimal case, incur costs (not scaled by size)
+    # Force dvSize["ExistingChiller] to zero if binExistingChiller is zero:
+    @constraint(m, ExistingChillerCostCon, m[Symbol("dvSize"*_n)]["ExistingChiller"] <= m[Symbol("binExistingChiller"*_n)] * BIG_NUMBER)
+
+    @constraint(m, ExistingChillerSelect, m[Symbol("binExistingChiller"*_n)] <= 1)
+
+    m[:ExistingChillerCost] = @expression(m, p.third_party_factor *
+        sum(p.s.existing_chiller.installed_cost_dollars * m[Symbol("binExistingChiller"*_n)])
+    )
+end

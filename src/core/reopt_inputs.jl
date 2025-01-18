@@ -722,7 +722,7 @@ function setup_existing_boiler_inputs(s::AbstractScenario, max_sizes, min_sizes,
     max_sizes["ExistingBoiler"] = s.existing_boiler.max_kw
     min_sizes["ExistingBoiler"] = 0.0
     existing_sizes["ExistingBoiler"] = 0.0
-    cap_cost_slope["ExistingBoiler"] = 0.0
+    cap_cost_slope["ExistingBoiler"] = s.existing_boiler.installed_cost_per_kw
     boiler_efficiency["ExistingBoiler"] = s.existing_boiler.efficiency
     # om_cost_per_kw["ExistingBoiler"] = 0.0
     tech_renewable_energy_fraction["ExistingBoiler"] = s.existing_boiler.fuel_renewable_energy_fraction
@@ -788,7 +788,7 @@ function setup_existing_chiller_inputs(s::AbstractScenario, max_sizes, min_sizes
     max_sizes["ExistingChiller"] = s.existing_chiller.max_kw
     min_sizes["ExistingChiller"] = 0.0
     existing_sizes["ExistingChiller"] = 0.0
-    cap_cost_slope["ExistingChiller"] = 0.0
+    cap_cost_slope["ExistingChiller"] = s.existing_chiller.installed_cost_per_kw
     cooling_cop["ExistingChiller"] .= s.existing_chiller.cop
     cooling_cf["ExistingChiller"]  = ones(8760*s.settings.time_steps_per_hour)
     # om_cost_per_kw["ExistingChiller"] = 0.0
